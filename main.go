@@ -7,24 +7,23 @@ import (
 	"os"
 )
 
-type Message struct {
-	Type     string `json:"type"`
-	Code     string `json:"code"`
-	Contents string `json:"message,omitempty"`
-}
+type ClientMap map[string]map[*websocket.Conn]bool
+type MessageChannel chan Message
 
-var clients = map[string]map[*websocket.Conn]bool{} // Map of room codes to client connections
-var broadcast = make(chan Message)
-var upgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool {
+func checkOrigin(r *http.Request) bool {
 	//origin := r.Header.Get("Origin") // TODO Add an origin check to the frontend
 	return true
-}}
+}
 
 func main() {
+	clients := ClientMap{} // Map of room codes to client connections
+	broadcast := make(MessageChannel)
+	upgrader := websocket.Upgrader{CheckOrigin: checkOrigin}
+
 	// Handle incoming requests
 	http.HandleFunc("/", connectionHandler)
 	// Concurrently deliver client messages
-	go broadcastHandler()
+	go broadcastHandler(broadcast, clients)
 
 	// Get the PORT
 	var port string
@@ -45,24 +44,18 @@ func main() {
 	}
 }
 
-/* handleRoomCode extracts the room code from the HTTP request query or generates a room code and
- * sends it to the client.
- */
-func handleRoomCode(r *http.Request, socket *websocket.Conn) string {
-	roomCode := r.URL.Query().Get("roomCode")
+// getRoomCode extracts the room code from the HTTP request query or generates a new room code.
+func getRoomCode(r *http.Request) string {
+	roomCode :=
 	if roomCode == "" {
 		// Generate a room code
 		roomCode = "CODE" // TODO How do we generate the room code?
-		_ = socket.WriteJSON(Message{
-			Type: "RoomCode",
-			Code: roomCode,
-		})
 	}
 
 	return roomCode
 }
 
-func connectionHandler(w http.ResponseWriter, r *http.Request) {
+func connectionHandler(w http.ResponseWriter, r *http.Request, upgrader websocket.Upgrader, broadcast MessageChannel, clients ClientMap) {
 	// Upgrade HTTP GET request to a socket connection
 	socket, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -70,32 +63,45 @@ func connectionHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer socket.Close()
 
-	// Get the room code
-	roomCode := handleRoomCode(r, socket)
-
-	// Update client map
-	if _, v := clients[roomCode]; v {
-		clients[roomCode][socket] = true
-	} else {
-		clients[roomCode] = map[*websocket.Conn]bool{
-			socket: true,
-		}
-	}
-
 	// Forever handle messages from this new client
 	for {
-		var message Message
-		_ = socket.ReadJSON(&message)
-		broadcast <- message // Send message to broadcast channel
+		message := ReadMessageFromJson(socket)
+		if message != nil {
+			broadcast <- *message
+		}
 	}
 }
 
-func broadcastHandler() {
+func generateRoomCode() string {
+	return "CODE"
+}
+
+func broadcastHandler(broadcast MessageChannel, clients ClientMap) {
 	for {
 		// Pop the next message off the broadcast channel and send it
 		message := <-broadcast
 		for socket := range clients[message.Code] {
-			_ = socket.WriteJSON(message)
+			switch message.Type {
+			case "GenerateRoomCode":
+				roomCode := generateRoomCode()
+				message = Message{Type: "GenerateRoomCode", Code: roomCode}
+			}
+
+
+
+			// Get the room code
+			roomCode := r.URL.Query().Get("roomCode")
+
+			// Update client map
+			if _, v := clients[roomCode]; v {
+				clients[roomCode][socket] = true
+			} else {
+				clients[roomCode] = map[*websocket.Conn]bool{
+					socket: true,
+				}
+			}
+
+			SendMessage(&message, socket)
 		}
 	}
 }

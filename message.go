@@ -1,0 +1,33 @@
+package main
+
+import (
+	"github.com/gorilla/websocket"
+	"log"
+)
+
+// Message represents JSON data sent across socket connections.
+type Message struct {
+	Type     string `json:"type"`
+	Code     string `json:"code"`
+	Contents string `json:"message,omitempty"`
+}
+
+// SendMessage writes the Message as a JSON to the given socket.
+func SendMessage(message *Message, socket *websocket.Conn) {
+	err := socket.WriteJSON(message)
+	if err != nil {
+		log.Printf("ERROR sending message of type '%s' - %s", message.Type, err)
+	}
+}
+
+// ReadMessageFromJson reads a JSON from the given socket (blocking), returning the decoded Message or nil if an
+// error occurred.
+func ReadMessageFromJson(socket *websocket.Conn) *Message {
+	var message Message
+	err := socket.ReadJSON(&message)
+	if err != nil {
+		log.Println("ERROR reading incoming message -", err)
+		return nil
+	}
+	return &message
+}
