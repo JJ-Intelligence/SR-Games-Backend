@@ -5,6 +5,12 @@ import (
 	"log"
 )
 
+// Request holds a Message and connection of a connected client.
+type Request struct {
+	Socket  *websocket.Conn
+	Message *Message
+}
+
 // Message represents JSON data sent across socket connections.
 type Message struct {
 	Type     string `json:"type"`

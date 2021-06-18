@@ -8,22 +8,20 @@ import (
 )
 
 type ClientMap map[string]map[*websocket.Conn]bool
-type MessageChannel chan Message
+type MessageChannel chan Request
 
-func checkOrigin(r *http.Request) bool {
-	//origin := r.Header.Get("Origin") // TODO Add an origin check to the frontend
-	return true
-}
-
+// main starts up the websocket server.
 func main() {
 	clients := ClientMap{} // Map of room codes to client connections
 	broadcast := make(MessageChannel)
 	upgrader := websocket.Upgrader{CheckOrigin: checkOrigin}
 
-	// Handle incoming requests
-	http.HandleFunc("/", connectionHandler)
 	// Concurrently deliver client messages
 	go broadcastHandler(broadcast, clients)
+	// Handle incoming requests
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		connectionHandler(w, r, upgrader, broadcast)
+	})
 
 	// Get the PORT
 	var port string
@@ -44,18 +42,15 @@ func main() {
 	}
 }
 
-// getRoomCode extracts the room code from the HTTP request query or generates a new room code.
-func getRoomCode(r *http.Request) string {
-	roomCode :=
-	if roomCode == "" {
-		// Generate a room code
-		roomCode = "CODE" // TODO How do we generate the room code?
-	}
-
-	return roomCode
+// checkOrigin checks a requests origin, returning true if the origin is valid.
+func checkOrigin(r *http.Request) bool {
+	//origin := r.Header.Get("Origin") // TODO Add an origin check to the frontend url
+	return true
 }
 
-func connectionHandler(w http.ResponseWriter, r *http.Request, upgrader websocket.Upgrader, broadcast MessageChannel, clients ClientMap) {
+// connectionHandler upgrades new HTTP requests from clients to websockets, reading in further messages from
+// those clients.
+func connectionHandler(w http.ResponseWriter, r *http.Request, upgrader websocket.Upgrader, broadcast MessageChannel) {
 	// Upgrade HTTP GET request to a socket connection
 	socket, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -67,41 +62,50 @@ func connectionHandler(w http.ResponseWriter, r *http.Request, upgrader websocke
 	for {
 		message := ReadMessageFromJson(socket)
 		if message != nil {
-			broadcast <- *message
+			broadcast <- Request{Socket: socket, Message: message}
 		}
 	}
 }
 
+// generateRoomCode generates a new client room code.
 func generateRoomCode() string {
-	return "CODE"
+	return "CODE" // TODO
 }
 
+// connectClient adds the new clients connection to the ClientMap.
+func connectClient(clients ClientMap, socket *websocket.Conn, roomCode string) {
+	if _, v := clients[roomCode]; v {
+		clients[roomCode][socket] = true
+	} else {
+		clients[roomCode] = map[*websocket.Conn]bool{
+			socket: true,
+		}
+	}
+}
+
+// broadcastHandler reads in messages from a MessageChannel and forwards them on or replies to clients.
 func broadcastHandler(broadcast MessageChannel, clients ClientMap) {
 	for {
 		// Pop the next message off the broadcast channel and send it
-		message := <-broadcast
-		for socket := range clients[message.Code] {
-			switch message.Type {
-			case "GenerateRoomCode":
-				roomCode := generateRoomCode()
-				message = Message{Type: "GenerateRoomCode", Code: roomCode}
+		request := <-broadcast
+		switch request.Message.Type {
+
+		case "Create":
+			// Generate new room code and connect the new client
+			roomCode := generateRoomCode()
+			message := Message{Type: "Create", Code: roomCode}
+			connectClient(clients, request.Socket, roomCode)
+			SendMessage(&message, request.Socket)
+
+		case "Connect":
+			// Connect the new client
+			connectClient(clients, request.Socket, request.Message.Code)
+
+		default:
+			// Read in client messages and broadcast them
+			for socket := range clients[request.Message.Code] {
+				SendMessage(request.Message, socket)
 			}
-
-
-
-			// Get the room code
-			roomCode := r.URL.Query().Get("roomCode")
-
-			// Update client map
-			if _, v := clients[roomCode]; v {
-				clients[roomCode][socket] = true
-			} else {
-				clients[roomCode] = map[*websocket.Conn]bool{
-					socket: true,
-				}
-			}
-
-			SendMessage(&message, socket)
 		}
 	}
 }
