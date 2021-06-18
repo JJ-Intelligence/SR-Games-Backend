@@ -2,8 +2,12 @@ package server
 
 import (
 	"github.com/gorilla/websocket"
+	"hash/fnv"
 	"log"
+	"math/rand"
 	"net/http"
+	"strconv"
+	"time"
 )
 
 type ClientMap map[string]map[*websocket.Conn]bool
@@ -11,16 +15,16 @@ type BroadcastChannel chan Request
 
 // Server stores all connection dependencies for the websocket server.
 type Server struct {
-	clients ClientMap
-	broadcast BroadcastChannel
+	clients        ClientMap
+	broadcast      BroadcastChannel
 	socketUpgrader websocket.Upgrader
 }
 
 // NewServer constructs a new Server instance.
 func NewServer(checkOriginFunc func(r *http.Request) bool) *Server {
 	return &Server{
-		clients: ClientMap{},
-		broadcast: make(BroadcastChannel),
+		clients:        ClientMap{},
+		broadcast:      make(BroadcastChannel),
 		socketUpgrader: websocket.Upgrader{CheckOrigin: checkOriginFunc},
 	}
 }
@@ -62,7 +66,11 @@ func connectionHandler(w http.ResponseWriter, r *http.Request, upgrader websocke
 
 // generateRoomCode generates a new client room code.
 func generateRoomCode() string {
-	return "CODE" // TODO
+	rand.Seed(time.Now().UnixNano())
+	num := rand.Int()
+	h := fnv.New32()
+	h.Write([]byte(strconv.Itoa(num)))
+	return strconv.Itoa(int(h.Sum32()))
 }
 
 // connectClient adds the new clients connection to the ClientMap.

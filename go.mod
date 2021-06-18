@@ -1,3 +1,7 @@
-module cmd/main
+module github.com/JJ-Intelligence/SR-Games-Backend
 
 go 1.16
+
+require (
+	github.com/gorilla/websocket v1.4.2
+)
