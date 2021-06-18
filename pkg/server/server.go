@@ -1,39 +1,38 @@
-package main
+package server
 
 import (
 	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
-	"os"
 )
 
 type ClientMap map[string]map[*websocket.Conn]bool
-type MessageChannel chan Request
+type BroadcastChannel chan Request
 
-// main starts up the websocket server.
-func main() {
-	clients := ClientMap{} // Map of room codes to client connections
-	broadcast := make(MessageChannel)
-	upgrader := websocket.Upgrader{CheckOrigin: checkOrigin}
+// Server stores all connection dependencies for the websocket server.
+type Server struct {
+	clients ClientMap
+	broadcast BroadcastChannel
+	socketUpgrader websocket.Upgrader
+}
 
+// NewServer constructs a new Server instance.
+func NewServer(checkOriginFunc func(r *http.Request) bool) *Server {
+	return &Server{
+		clients: ClientMap{},
+		broadcast: make(BroadcastChannel),
+		socketUpgrader: websocket.Upgrader{CheckOrigin: checkOriginFunc},
+	}
+}
+
+// Start starts up the websocket server.
+func (server Server) Start(port string) {
 	// Concurrently deliver client messages
-	go broadcastHandler(broadcast, clients)
+	go broadcastHandler(server.broadcast, server.clients)
 	// Handle incoming requests
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		connectionHandler(w, r, upgrader, broadcast)
+		connectionHandler(w, r, server.socketUpgrader, server.broadcast)
 	})
-
-	// Get the PORT
-	var port string
-	if len(os.Args) > 1 {
-		port = os.Args[1]
-	} else {
-		port = os.Getenv("PORT")
-	}
-
-	if port == "" {
-		log.Fatal("You must define a 'PORT' environment variable for running the web server")
-	}
 
 	log.Println("Started server on port", port)
 	err := http.ListenAndServe(":"+port, nil)
@@ -42,15 +41,9 @@ func main() {
 	}
 }
 
-// checkOrigin checks a requests origin, returning true if the origin is valid.
-func checkOrigin(r *http.Request) bool {
-	//origin := r.Header.Get("Origin") // TODO Add an origin check to the frontend url
-	return true
-}
-
 // connectionHandler upgrades new HTTP requests from clients to websockets, reading in further messages from
 // those clients.
-func connectionHandler(w http.ResponseWriter, r *http.Request, upgrader websocket.Upgrader, broadcast MessageChannel) {
+func connectionHandler(w http.ResponseWriter, r *http.Request, upgrader websocket.Upgrader, broadcast BroadcastChannel) {
 	// Upgrade HTTP GET request to a socket connection
 	socket, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -84,7 +77,7 @@ func connectClient(clients ClientMap, socket *websocket.Conn, roomCode string) {
 }
 
 // broadcastHandler reads in messages from a MessageChannel and forwards them on or replies to clients.
-func broadcastHandler(broadcast MessageChannel, clients ClientMap) {
+func broadcastHandler(broadcast BroadcastChannel, clients ClientMap) {
 	for {
 		// Pop the next message off the broadcast channel and send it
 		request := <-broadcast
@@ -109,19 +102,3 @@ func broadcastHandler(broadcast MessageChannel, clients ClientMap) {
 		}
 	}
 }
-
-/*
- A1. Someone connects and creates a lobby; Backend returns a hash code based on the time
- A2. Person joins a socket connection; store lobby code -> socket room in memory
- A3. Wait for player B to join
-
- B1. Connects to a pre-existing lobby; Backend received a hash code
- B2. Backend searches store for socket room, using hash code and connects player B
- B3. Player B has joined the game
-
- * Game starts
-	* In separate store, backend stores hash code -> lobby board
-    * Sequentially backend sends a message to A,B to take their turn
-    * Each turn ends with the player sending their move to the backend
-    * Backend checks move is legal
-*/
