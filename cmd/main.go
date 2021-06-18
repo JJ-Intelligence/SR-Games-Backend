@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/JJ-Intelligence/SR-Games-Backend/internal/server"
+	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/server"
 	"log"
 	"net/http"
 	"os"
