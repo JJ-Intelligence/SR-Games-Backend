@@ -57,9 +57,18 @@ func connectionHandler(w http.ResponseWriter, r *http.Request, upgrader websocke
 
 	// Forever handle messages from this new client
 	for {
-		message := ReadMessageFromJson(socket)
-		if message != nil {
-			broadcast <- Request{Socket: socket, Message: message}
+
+		// ReadMessageFromJson reads a JSON from the given socket (blocking), returning the decoded Message or nil if an
+		// error occurred.
+		var message Message
+		err := socket.ReadJSON(&message)
+		if websocket.IsUnexpectedCloseError(err) {
+			log.Println("Client errored or disconnected", err)
+			return
+		} else if err != nil {
+			log.Println("ERROR reading incoming message -", err)
+		} else {
+			broadcast <- Request{Socket: socket, Message: &message}
 		}
 	}
 }

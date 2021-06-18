@@ -25,15 +25,3 @@ func SendMessage(message *Message, socket *websocket.Conn) {
 		log.Printf("ERROR sending message of type '%s' - %s", message.Type, err)
 	}
 }
-
-// ReadMessageFromJson reads a JSON from the given socket (blocking), returning the decoded Message or nil if an
-// error occurred.
-func ReadMessageFromJson(socket *websocket.Conn) *Message {
-	var message Message
-	err := socket.ReadJSON(&message)
-	if err != nil {
-		log.Println("ERROR reading incoming message -", err)
-		return nil
-	}
-	return &message
-}
