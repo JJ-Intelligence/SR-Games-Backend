@@ -19,8 +19,8 @@ func main() {
 	if port == "" {
 		log.Fatal("You must define a 'PORT' environment variable for running the web server")
 	}
-	server := NewServer(checkOrigin)
-	server.Start()
+	s := server.NewServer(checkOrigin)
+	s.Start(port)
 }
 
 // checkOrigin checks a requests origin, returning true if the origin is valid.

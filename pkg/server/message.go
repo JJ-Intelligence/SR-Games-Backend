@@ -14,7 +14,7 @@ type Request struct {
 // Message represents JSON data sent across socket connections.
 type Message struct {
 	Type     string `json:"type"`
-	Code     string `json:"code"`
+	Code     string `json:"code,omitempty"`
 	Contents string `json:"message,omitempty"`
 }
 
