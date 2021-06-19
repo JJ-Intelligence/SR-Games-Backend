@@ -1,14 +1,36 @@
 # Pull Go image
-FROM golang:latest
+FROM golang:1.16-alpine as builder
+ENV GO111MODULE=on
 
-# Copy backend to container and build/install go packages
-ADD . /go/src/SR-Games-Backend
-RUN go install SR-Games-Backend
+# Set working directory
+WORKDIR /sr-games-backend
 
-# Pull linux image
-FROM alpine:latest
-COPY --from=0 /go/bin/SR-Games-Backend .
-ENV PORT 8080
+# Cache go modules
+COPY go.mod .
+COPY go.sum .
+RUN go mod download
 
-# Run project
-CMD ["./SR-Games-Backend"]
+# Copy backend to container image
+COPY . .
+
+# Build binary (backend.exe) inside container
+RUN CGO_ENABLED=0 GOOS=linux go build -o backend.exe cmd/main.go
+
+# Create production image
+FROM scratch
+COPY --from=builder /sr-games-backend/backend.exe /backend.exe
+ENV PORT 8081
+EXPOSE 8081
+CMD ["./backend.exe", "8081"]
+
+#FROM alpine
+#RUN apk add --no-cache ca-certificates
+#
+## Copy binary to production image
+#COPY --from=builder /backend.exe /
+#
+## Set environment variables
+#ENV PORT 8080
+#
+## Run project
+#CMD ["/backend"]

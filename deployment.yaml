@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sr-games-backend-gke
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sr-games-backend
+  template:
+    metadata:
+      labels:
+        app: sr-games-backend
+    spec:
+      containers:
+        - name: sr-games-backend-app
+          image: gcr.io/JJGames/helloworld-gke:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
