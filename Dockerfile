@@ -19,9 +19,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o backend.exe cmd/main.go
 # Create production image
 FROM scratch
 COPY --from=builder /sr-games-backend/backend.exe /backend.exe
-ENV PORT 8081
-EXPOSE 8081
-CMD ["./backend.exe", "8081"]
+ENV PORT 8080
+EXPOSE 8080
+CMD ["./backend.exe"]
 
 #FROM alpine
 #RUN apk add --no-cache ca-certificates
