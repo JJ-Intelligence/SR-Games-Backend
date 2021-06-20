@@ -6,32 +6,32 @@ import (
 	"net/http"
 )
 
-type BroadcastChannel chan Request
 
 // Server stores all connection dependencies for the websocket server.
 type Server struct {
 	store          ConnectionStore
-	broadcast      BroadcastChannel
 	socketUpgrader websocket.Upgrader
 }
 
 // NewServer constructs a new Server instance.
 func NewServer(checkOriginFunc func(r *http.Request) bool) *Server {
 	return &Server{
-		store:          &MapConnectionStore{},
-		broadcast:      make(BroadcastChannel),
+		store:          NewMapConnectionStore(),
 		socketUpgrader: websocket.Upgrader{CheckOrigin: checkOriginFunc},
 	}
 }
 
 // Start starts up the websocket server.
-func (server Server) Start(port string) {
-	// Concurrently deliver client messages
-	go broadcastHandler(server.store, server.broadcast)
-	// Handle incoming requests
-	http.HandleFunc("/", connectionHandler(server.store, server.broadcast, server.socketUpgrader))
+func (s Server) Start(port string, maxWorkers int) {
+	// Create a RequestHandler to concurrently deliver client messages
+	requests := make(RequestChannel)
+	requestHandler := NewRequestHandler(requests, maxWorkers)
+	go requestHandler.Start(s.store)
 
-	log.Println("Started server on port", port)
+	// Handle incoming requests
+	http.HandleFunc("/", connectionHandler(s.store, requests, s.socketUpgrader))
+
+	log.Printf("Started server on port %s, with max workers %d\n", port, maxWorkers)
 	err := http.ListenAndServe(":"+port, nil)
 	if err != nil {
 		log.Fatal("ERROR server failed during ListenAndServer -", err)
@@ -42,7 +42,7 @@ func (server Server) Start(port string) {
 // those clients.
 func connectionHandler(
 	store ConnectionStore,
-	broadcast BroadcastChannel,
+	requests RequestChannel,
 	upgrader websocket.Upgrader,
 ) func(w http.ResponseWriter, r *http.Request) {
 
@@ -61,7 +61,7 @@ func connectionHandler(
 
 		// Forever handle messages from this new client
 		for {
-			err = handleIncomingMessage(socket, broadcast)
+			err = handleIncomingMessage(socket, requests)
 			if err != nil {
 				log.Println("Client errored or disconnected", err)
 				return
@@ -70,9 +70,9 @@ func connectionHandler(
 	}
 }
 
-// handleIncomingMessage reads messages from a socket and sends them to the broadcast channel, returning an error
+// handleIncomingMessage reads messages from a socket and sends them to the queue channel, returning an error
 // if the client has disconnected.
-func handleIncomingMessage(conn ConnectionWrapper, broadcast BroadcastChannel) error {
+func handleIncomingMessage(conn ConnectionWrapper, requests RequestChannel) error {
 	message, err := conn.ReadMessage()
 
 	if websocket.IsUnexpectedCloseError(err) {
@@ -81,37 +81,77 @@ func handleIncomingMessage(conn ConnectionWrapper, broadcast BroadcastChannel) e
 	} else if err != nil {
 		log.Println("ERROR reading incoming message -", err)
 	} else {
-		broadcast <- Request{Connection: conn, Message: message}
+		requests <- Request{Connection: conn, Message: message}
 	}
 	return nil
 }
 
-// TODO - broadcastHandler is not scalable! Create a worker pool to handle job (message) requests
+type RequestChannel chan Request // Channel of incoming client requests
+type WorkerRequestChannels chan RequestChannel // Channel of request channels belonging to each worker
 
-// broadcastHandler reads in messages from a MessageChannel and forwards them on or replies to clients.
-func broadcastHandler(store ConnectionStore, broadcast BroadcastChannel) {
+// RequestHandler stores request and worker channels for concurrently handling incoming client requests.
+type RequestHandler struct {
+	requests RequestChannel
+	workers WorkerRequestChannels
+}
+
+func NewRequestHandler(requests RequestChannel, maxWorkers int) *RequestHandler {
+	return &RequestHandler{
+		requests: requests,
+		workers: make(WorkerRequestChannels, maxWorkers),
+	}
+}
+
+// Start creates concurrent worker functions which handle incoming requests, and passes incoming requests to
+// free workers.
+func (h *RequestHandler) Start(store ConnectionStore)  {
+	// Create workers
+	for i := 0; i < cap(h.workers); i++ {
+		go runRequestWorker(h.workers, make(RequestChannel), store)
+	}
+
+	// Pass incoming requests to workers
 	for {
-		// Pop the next message off the broadcast channel and send it
-		request := <-broadcast
-		switch request.Message.Type {
+		req := <-h.requests
 
+		// Concurrently find a free worker and add this request to their RequestChannel
+		go func() {
+			worker := <-h.workers
+			worker <- req
+		}()
+	}
+}
+
+// runRequestWorker forever handles requests from the given RequestChannel.
+func runRequestWorker(workers WorkerRequestChannels, requests RequestChannel, store ConnectionStore)  {
+	for {
+		// Register as a worker
+		workers <- requests
+
+		// Wait for a request to handle
+		r := <-requests
+
+		switch r.Message.Type {
 		case "Create":
 			// Generate new room code and connect the new client
 			code := store.NewCode()
-			store.Connect(code, request.Connection)
-			err := request.Connection.WriteMessage(Message{Type: "Create", Code: code})
+			store.Connect(code, r.Connection)
+			err := r.Connection.WriteMessage(Message{Type: "Create", Contents: code})
 			if err != nil {
 				log.Println("ERROR sending message of type 'Create' -", err)
 			}
 
 		case "Connect":
 			// Connect the new client
-			store.Connect(request.Message.Code, request.Connection)
+			store.Connect(r.Message.Contents, r.Connection)
 
 		default:
 			// Broadcast message to all clients within the same room
-			for _, conn := range store.GetConnectionsByCode(request.Message.Code) {
-				conn.WriteMessage(request.Message)
+			for _, conn := range store.GetConnectionsWithSameCode(r.Connection) {
+				err := conn.WriteMessage(r.Message)
+				if err != nil {
+					log.Printf("ERROR sending message of type '%s' - %s\n", r.Message.Type, err)
+				}
 			}
 		}
 	}

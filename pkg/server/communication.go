@@ -3,6 +3,7 @@ package server
 import (
 	"github.com/gorilla/websocket"
 	"hash/fnv"
+	"log"
 	"math/rand"
 	"strconv"
 	"time"
@@ -17,8 +18,7 @@ type Request struct {
 // Message represents JSON data sent across socket connections.
 type Message struct {
 	Type     string `json:"type"`
-	Code     string `json:"code,omitempty"`
-	Contents string `json:"message,omitempty"`
+	Contents string `json:"contents,omitempty"`
 }
 
 // ConnectionWrapper wraps a client connection, handling communication.
@@ -56,14 +56,21 @@ type ConnectionStore interface {
 	// Disconnect removes a client connection from the store.
 	Disconnect(conn ConnectionWrapper)
 
-	// GetConnectionsByCode gets an array of client connections registered with a given code.
-	GetConnectionsByCode(code string) []ConnectionWrapper
+	// GetConnectionsWithSameCode gets an array of client connections registered with a given code.
+	GetConnectionsWithSameCode(conn ConnectionWrapper) []ConnectionWrapper
 }
 
 // MapConnectionStore is a ConnectionStore which stores information in maps within local memory.
 type MapConnectionStore struct {
 	codeStore map[string]map[ConnectionWrapper]bool // code -> {connection}
 	connStore map[ConnectionWrapper]string // connection -> code
+}
+
+func NewMapConnectionStore() *MapConnectionStore {
+	return &MapConnectionStore{
+		codeStore: make(map[string]map[ConnectionWrapper]bool),
+		connStore: make(map[ConnectionWrapper]string),
+	}
 }
 
 // NewCode returns a hashed random int, seeded with the current time.
@@ -76,6 +83,11 @@ func (m *MapConnectionStore) NewCode() string {
 }
 
 func (m *MapConnectionStore) Connect(code string, conn ConnectionWrapper) {
+	// Remove possible existing connection
+	m.Disconnect(conn)
+
+	log.Println("New connection to code", code)
+	// Add new connection
 	m.connStore[conn] = code
 	if _, ok := m.codeStore[code]; ok {
 		m.codeStore[code][conn] = true
@@ -88,6 +100,7 @@ func (m *MapConnectionStore) Connect(code string, conn ConnectionWrapper) {
 
 func (m *MapConnectionStore) Disconnect(conn ConnectionWrapper) {
 	if code, ok := m.connStore[conn]; ok {
+		log.Println("Disconnection from code", code)
 		delete(m.connStore, conn)
 		if len(m.codeStore[code]) == 1 {
 			delete(m.codeStore, code)
@@ -97,13 +110,15 @@ func (m *MapConnectionStore) Disconnect(conn ConnectionWrapper) {
 	}
 }
 
-func (m *MapConnectionStore) GetConnectionsByCode(code string) []ConnectionWrapper {
-	if val, ok := m.codeStore[code]; ok {
-		conns := make([]ConnectionWrapper, 0, len(val))
-		for k := range val {
-			conns = append(conns, k)
+func (m *MapConnectionStore) GetConnectionsWithSameCode(conn ConnectionWrapper) []ConnectionWrapper {
+	if code, connExists := m.connStore[conn]; connExists {
+		if val, codeExists := m.codeStore[code]; codeExists {
+			conns := make([]ConnectionWrapper, 0, len(val))
+			for k := range val {
+				conns = append(conns, k)
+			}
+			return conns
 		}
-		return conns
 	}
 
 	return nil
