@@ -18,6 +18,7 @@ type Request struct {
 // Message represents JSON data sent across socket connections.
 type Message struct {
 	Type     string `json:"type"`
+	Code string `json:"code,omitempty"`
 	Contents string `json:"contents,omitempty"`
 }
 
@@ -56,8 +57,8 @@ type ConnectionStore interface {
 	// Disconnect removes a client connection from the store.
 	Disconnect(conn ConnectionWrapper)
 
-	// GetConnectionsWithSameCode gets an array of client connections registered with a given code.
-	GetConnectionsWithSameCode(conn ConnectionWrapper) []ConnectionWrapper
+	// GetConnectionsByCode gets an array of client connections registered with a given code.
+	GetConnectionsByCode(code string) []ConnectionWrapper
 }
 
 // MapConnectionStore is a ConnectionStore which stores information in maps within local memory.
@@ -110,15 +111,13 @@ func (m *MapConnectionStore) Disconnect(conn ConnectionWrapper) {
 	}
 }
 
-func (m *MapConnectionStore) GetConnectionsWithSameCode(conn ConnectionWrapper) []ConnectionWrapper {
-	if code, connExists := m.connStore[conn]; connExists {
-		if val, codeExists := m.codeStore[code]; codeExists {
-			conns := make([]ConnectionWrapper, 0, len(val))
-			for k := range val {
-				conns = append(conns, k)
-			}
-			return conns
+func (m *MapConnectionStore) GetConnectionsByCode(code string) []ConnectionWrapper {
+	if val, ok := m.codeStore[code]; ok {
+		conns := make([]ConnectionWrapper, 0, len(val))
+		for k := range val {
+			conns = append(conns, k)
 		}
+		return conns
 	}
 
 	return nil

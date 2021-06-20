@@ -136,18 +136,18 @@ func runRequestWorker(workers WorkerRequestChannels, requests RequestChannel, st
 			// Generate new room code and connect the new client
 			code := store.NewCode()
 			store.Connect(code, r.Connection)
-			err := r.Connection.WriteMessage(Message{Type: "Create", Contents: code})
+			err := r.Connection.WriteMessage(Message{Type: "Create", Code: code})
 			if err != nil {
 				log.Println("ERROR sending message of type 'Create' -", err)
 			}
 
 		case "Connect":
 			// Connect the new client
-			store.Connect(r.Message.Contents, r.Connection)
+			store.Connect(r.Message.Code, r.Connection)
 
 		default:
 			// Broadcast message to all clients within the same room
-			for _, conn := range store.GetConnectionsWithSameCode(r.Connection) {
+			for _, conn := range store.GetConnectionsByCode(r.Message.Code) {
 				err := conn.WriteMessage(r.Message)
 				if err != nil {
 					log.Printf("ERROR sending message of type '%s' - %s\n", r.Message.Type, err)
