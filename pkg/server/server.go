@@ -40,7 +40,12 @@ func (server Server) Start(port string) {
 
 // connectionHandler upgrades new HTTP requests from clients to websockets, reading in further messages from
 // those clients.
-func connectionHandler(store ConnectionStore, broadcast BroadcastChannel, upgrader websocket.Upgrader) func(w http.ResponseWriter, r *http.Request) {
+func connectionHandler(
+	store ConnectionStore,
+	broadcast BroadcastChannel,
+	upgrader websocket.Upgrader,
+) func(w http.ResponseWriter, r *http.Request) {
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Upgrade HTTP GET request to a socket connection
 		s, err := upgrader.Upgrade(w, r, nil)
@@ -80,6 +85,8 @@ func handleIncomingMessage(conn ConnectionWrapper, broadcast BroadcastChannel) e
 	}
 	return nil
 }
+
+// TODO - broadcastHandler is not scalable! Create a worker pool to handle job (message) requests
 
 // broadcastHandler reads in messages from a MessageChannel and forwards them on or replies to clients.
 func broadcastHandler(store ConnectionStore, broadcast BroadcastChannel) {

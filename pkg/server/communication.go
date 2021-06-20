@@ -33,7 +33,6 @@ type ConnectionWrapper interface {
 // SocketWrapper is a ConnectionWrapper which wraps a client websocket connection.
 type SocketWrapper struct {
 	socket *websocket.Conn
-	code   string
 }
 
 func (s *SocketWrapper) ReadMessage() (Message, error) {
@@ -46,18 +45,25 @@ func (s *SocketWrapper) WriteMessage(message Message) error {
 	return s.socket.WriteJSON(message)
 }
 
+// ConnectionStore stores client connection and code information.
 type ConnectionStore interface {
 	// NewCode generates a new unique code.
 	NewCode() string
 
+	// Connect stores a new client connection.
 	Connect(code string, conn ConnectionWrapper)
+	
+	// Disconnect removes a client connection from the store.
 	Disconnect(conn ConnectionWrapper)
+
+	// GetConnectionsByCode gets an array of client connections registered with a given code.
 	GetConnectionsByCode(code string) []ConnectionWrapper
 }
 
+// MapConnectionStore is a ConnectionStore which stores information in maps within local memory.
 type MapConnectionStore struct {
-	codeStore map[string]map[ConnectionWrapper]bool
-	connStore map[ConnectionWrapper]string
+	codeStore map[string]map[ConnectionWrapper]bool // code -> {connection}
+	connStore map[ConnectionWrapper]string // connection -> code
 }
 
 // NewCode returns a hashed random int, seeded with the current time.
