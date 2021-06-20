@@ -28,12 +28,25 @@ func (s Server) Start(port string, maxWorkers int) {
 	go requestHandler.Start(s.store)
 
 	// Handle incoming requests
+	http.HandleFunc("/createLobby", createLobby(s.store))
 	http.HandleFunc("/", connectionHandler(s.store, requests, s.socketUpgrader))
 
 	log.Printf("Started server on port %s, with max workers %d\n", port, maxWorkers)
 	err := http.ListenAndServe(":"+port, nil)
 	if err != nil {
 		log.Fatal("ERROR server failed during ListenAndServer -", err)
+	}
+}
+
+// createLobby generates and returns a new code
+func createLobby(
+	store ConnectionStore,
+) func(w http.ResponseWriter, r *http.Request) {
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		code := store.NewCode()
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(code))
 	}
 }
 
@@ -131,15 +144,6 @@ func runRequestWorker(workers WorkerRequestChannels, requests RequestChannel, st
 		r := <-requests
 
 		switch r.Message.Type {
-		case "Create":
-			// Generate new room code and connect the new client
-			code := store.NewCode()
-			store.Connect(code, r.Connection)
-			err := r.Connection.WriteMessage(Message{Type: "Create", Code: code})
-			if err != nil {
-				log.Println("ERROR sending message of type 'Create' -", err)
-			}
-
 		case "Connect":
 			// Connect the new client
 			store.Connect(r.Message.Code, r.Connection)
