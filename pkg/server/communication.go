@@ -18,7 +18,7 @@ type Request struct {
 // Message represents JSON data sent across socket connections.
 type Message struct {
 	Type     string `json:"type"`
-	Code string `json:"code,omitempty"`
+	Code     string `json:"code,omitempty"`
 	Contents string `json:"contents,omitempty"`
 }
 
@@ -53,7 +53,7 @@ type ConnectionStore interface {
 
 	// Connect stores a new client connection.
 	Connect(code string, conn ConnectionWrapper)
-	
+
 	// Disconnect removes a client connection from the store.
 	Disconnect(conn ConnectionWrapper)
 
@@ -64,7 +64,7 @@ type ConnectionStore interface {
 // MapConnectionStore is a ConnectionStore which stores information in maps within local memory.
 type MapConnectionStore struct {
 	codeStore map[string]map[ConnectionWrapper]bool // code -> {connection}
-	connStore map[ConnectionWrapper]string // connection -> code
+	connStore map[ConnectionWrapper]string          // connection -> code
 }
 
 func NewMapConnectionStore() *MapConnectionStore {

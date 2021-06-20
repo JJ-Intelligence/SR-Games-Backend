@@ -6,7 +6,6 @@ import (
 	"net/http"
 )
 
-
 // Server stores all connection dependencies for the websocket server.
 type Server struct {
 	store          ConnectionStore
@@ -86,25 +85,25 @@ func handleIncomingMessage(conn ConnectionWrapper, requests RequestChannel) erro
 	return nil
 }
 
-type RequestChannel chan Request // Channel of incoming client requests
+type RequestChannel chan Request               // Channel of incoming client requests
 type WorkerRequestChannels chan RequestChannel // Channel of request channels belonging to each worker
 
 // RequestHandler stores request and worker channels for concurrently handling incoming client requests.
 type RequestHandler struct {
 	requests RequestChannel
-	workers WorkerRequestChannels
+	workers  WorkerRequestChannels
 }
 
 func NewRequestHandler(requests RequestChannel, maxWorkers int) *RequestHandler {
 	return &RequestHandler{
 		requests: requests,
-		workers: make(WorkerRequestChannels, maxWorkers),
+		workers:  make(WorkerRequestChannels, maxWorkers),
 	}
 }
 
 // Start creates concurrent worker functions which handle incoming requests, and passes incoming requests to
 // free workers.
-func (h *RequestHandler) Start(store ConnectionStore)  {
+func (h *RequestHandler) Start(store ConnectionStore) {
 	// Create workers
 	for i := 0; i < cap(h.workers); i++ {
 		go runRequestWorker(h.workers, make(RequestChannel), store)
@@ -123,7 +122,7 @@ func (h *RequestHandler) Start(store ConnectionStore)  {
 }
 
 // runRequestWorker forever handles requests from the given RequestChannel.
-func runRequestWorker(workers WorkerRequestChannels, requests RequestChannel, store ConnectionStore)  {
+func runRequestWorker(workers WorkerRequestChannels, requests RequestChannel, store ConnectionStore) {
 	for {
 		// Register as a worker
 		workers <- requests
