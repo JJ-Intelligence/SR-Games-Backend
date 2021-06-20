@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 )
 
 func main() {
@@ -19,8 +20,22 @@ func main() {
 	if port == "" {
 		log.Fatal("You must define a 'PORT' environment variable for running the web server")
 	}
+
+	// Get the max workers
+	maxWorkersStr := os.Getenv("MAX_WORKERS")
+	var maxWorkers int
+	if maxWorkersStr == "" {
+		maxWorkers = 10
+	} else {
+		var err error
+		maxWorkers, err = strconv.Atoi(os.Getenv("MAX_WORKERS"))
+		if err != nil {
+			log.Fatal("ERROR while passing MAX_WORKERS to integer -", err)
+		}
+	}
+
 	s := server.NewServer(checkOrigin)
-	s.Start(port)
+	s.Start(port, maxWorkers)
 }
 
 // checkOrigin checks a requests origin, returning true if the origin is valid.

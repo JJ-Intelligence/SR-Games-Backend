@@ -2,119 +2,156 @@ package server
 
 import (
 	"github.com/gorilla/websocket"
-	"hash/fnv"
 	"log"
-	"math/rand"
 	"net/http"
-	"strconv"
-	"time"
 )
 
-type ClientMap map[string]map[*websocket.Conn]bool
-type BroadcastChannel chan Request
 
 // Server stores all connection dependencies for the websocket server.
 type Server struct {
-	clients        ClientMap
-	broadcast      BroadcastChannel
+	store          ConnectionStore
 	socketUpgrader websocket.Upgrader
 }
 
 // NewServer constructs a new Server instance.
 func NewServer(checkOriginFunc func(r *http.Request) bool) *Server {
 	return &Server{
-		clients:        ClientMap{},
-		broadcast:      make(BroadcastChannel),
+		store:          NewMapConnectionStore(),
 		socketUpgrader: websocket.Upgrader{CheckOrigin: checkOriginFunc},
 	}
 }
 
 // Start starts up the websocket server.
-func (server Server) Start(port string) {
-	// Concurrently deliver client messages
-	go broadcastHandler(server.broadcast, server.clients)
-	// Handle incoming requests
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		connectionHandler(w, r, server.socketUpgrader, server.broadcast)
-	})
+func (s Server) Start(port string, maxWorkers int) {
+	// Create a RequestHandler to concurrently deliver client messages
+	requests := make(RequestChannel)
+	requestHandler := NewRequestHandler(requests, maxWorkers)
+	go requestHandler.Start(s.store)
 
-	log.Println("Started server on port", port)
+	// Handle incoming requests
+	http.HandleFunc("/", connectionHandler(s.store, requests, s.socketUpgrader))
+
+	log.Printf("Started server on port %s, with max workers %d\n", port, maxWorkers)
 	err := http.ListenAndServe(":"+port, nil)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("ERROR server failed during ListenAndServer -", err)
 	}
 }
 
 // connectionHandler upgrades new HTTP requests from clients to websockets, reading in further messages from
 // those clients.
-func connectionHandler(w http.ResponseWriter, r *http.Request, upgrader websocket.Upgrader, broadcast BroadcastChannel) {
-	// Upgrade HTTP GET request to a socket connection
-	socket, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Println("ERROR upgrading connection -", err)
-	}
-	defer socket.Close()
+func connectionHandler(
+	store ConnectionStore,
+	requests RequestChannel,
+	upgrader websocket.Upgrader,
+) func(w http.ResponseWriter, r *http.Request) {
 
-	// Forever handle messages from this new client
-	for {
-
-		// ReadMessageFromJson reads a JSON from the given socket (blocking), returning the decoded Message or nil if an
-		// error occurred.
-		var message Message
-		err := socket.ReadJSON(&message)
-		if websocket.IsUnexpectedCloseError(err) {
-			log.Println("Client errored or disconnected", err)
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Upgrade HTTP GET request to a socket connection
+		s, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			log.Println("ERROR upgrading connection -", err)
 			return
-		} else if err != nil {
-			log.Println("ERROR reading incoming message -", err)
-		} else {
-			broadcast <- Request{Socket: socket, Message: &message}
+		}
+		socket := &SocketWrapper{socket: s}
+		defer func() {
+			store.Disconnect(socket)
+			socket.socket.Close()
+		}()
+
+		// Forever handle messages from this new client
+		for {
+			err = handleIncomingMessage(socket, requests)
+			if err != nil {
+				log.Println("Client errored or disconnected", err)
+				return
+			}
 		}
 	}
 }
 
-// generateRoomCode generates a new client room code.
-func generateRoomCode() string {
-	rand.Seed(time.Now().UnixNano())
-	num := rand.Int()
-	h := fnv.New32()
-	h.Write([]byte(strconv.Itoa(num)))
-	return strconv.Itoa(int(h.Sum32()))
-}
+// handleIncomingMessage reads messages from a socket and sends them to the queue channel, returning an error
+// if the client has disconnected.
+func handleIncomingMessage(conn ConnectionWrapper, requests RequestChannel) error {
+	message, err := conn.ReadMessage()
 
-// connectClient adds the new clients connection to the ClientMap.
-func connectClient(clients ClientMap, socket *websocket.Conn, roomCode string) {
-	if _, v := clients[roomCode]; v {
-		clients[roomCode][socket] = true
+	if websocket.IsUnexpectedCloseError(err) {
+		log.Println("Client errored or disconnected", err)
+		return err
+	} else if err != nil {
+		log.Println("ERROR reading incoming message -", err)
 	} else {
-		clients[roomCode] = map[*websocket.Conn]bool{
-			socket: true,
-		}
+		requests <- Request{Connection: conn, Message: message}
+	}
+	return nil
+}
+
+type RequestChannel chan Request // Channel of incoming client requests
+type WorkerRequestChannels chan RequestChannel // Channel of request channels belonging to each worker
+
+// RequestHandler stores request and worker channels for concurrently handling incoming client requests.
+type RequestHandler struct {
+	requests RequestChannel
+	workers WorkerRequestChannels
+}
+
+func NewRequestHandler(requests RequestChannel, maxWorkers int) *RequestHandler {
+	return &RequestHandler{
+		requests: requests,
+		workers: make(WorkerRequestChannels, maxWorkers),
 	}
 }
 
-// broadcastHandler reads in messages from a MessageChannel and forwards them on or replies to clients.
-func broadcastHandler(broadcast BroadcastChannel, clients ClientMap) {
-	for {
-		// Pop the next message off the broadcast channel and send it
-		request := <-broadcast
-		switch request.Message.Type {
+// Start creates concurrent worker functions which handle incoming requests, and passes incoming requests to
+// free workers.
+func (h *RequestHandler) Start(store ConnectionStore)  {
+	// Create workers
+	for i := 0; i < cap(h.workers); i++ {
+		go runRequestWorker(h.workers, make(RequestChannel), store)
+	}
 
+	// Pass incoming requests to workers
+	for {
+		req := <-h.requests
+
+		// Concurrently find a free worker and add this request to their RequestChannel
+		go func() {
+			worker := <-h.workers
+			worker <- req
+		}()
+	}
+}
+
+// runRequestWorker forever handles requests from the given RequestChannel.
+func runRequestWorker(workers WorkerRequestChannels, requests RequestChannel, store ConnectionStore)  {
+	for {
+		// Register as a worker
+		workers <- requests
+
+		// Wait for a request to handle
+		r := <-requests
+
+		switch r.Message.Type {
 		case "Create":
 			// Generate new room code and connect the new client
-			roomCode := generateRoomCode()
-			message := Message{Type: "Create", Code: roomCode}
-			connectClient(clients, request.Socket, roomCode)
-			SendMessage(&message, request.Socket)
+			code := store.NewCode()
+			store.Connect(code, r.Connection)
+			err := r.Connection.WriteMessage(Message{Type: "Create", Code: code})
+			if err != nil {
+				log.Println("ERROR sending message of type 'Create' -", err)
+			}
 
 		case "Connect":
 			// Connect the new client
-			connectClient(clients, request.Socket, request.Message.Code)
+			store.Connect(r.Message.Code, r.Connection)
 
 		default:
-			// Read in client messages and broadcast them
-			for socket := range clients[request.Message.Code] {
-				SendMessage(request.Message, socket)
+			// Broadcast message to all clients within the same room
+			for _, conn := range store.GetConnectionsByCode(r.Message.Code) {
+				err := conn.WriteMessage(r.Message)
+				if err != nil {
+					log.Printf("ERROR sending message of type '%s' - %s\n", r.Message.Type, err)
+				}
 			}
 		}
 	}
