@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/server"
 )
@@ -37,9 +38,9 @@ func checkFlagsSet() {
 
 // checkOrigin checks a requests origin, returning true if the origin is valid.
 func checkOrigin(r *http.Request) bool {
-	// log.Println(fmt.Sprintf("https://%s", r.Host))
-	// return strings.Contains(fmt.Sprintf("https://%s", r.Host), *frontendHost)
-	return true
+	origin := r.Header.Get("Origin")
+	log.Println(origin)
+	return strings.Contains(origin, *frontendHost)
 }
 
 func main() {
