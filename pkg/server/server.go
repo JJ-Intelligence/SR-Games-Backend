@@ -1,9 +1,11 @@
 package server
 
 import (
-	"github.com/gorilla/websocket"
+	"fmt"
 	"log"
 	"net/http"
+
+	"github.com/gorilla/websocket"
 )
 
 // Server stores all connection dependencies for the websocket server.
@@ -21,14 +23,14 @@ func NewServer(checkOriginFunc func(r *http.Request) bool) *Server {
 }
 
 // Start starts up the websocket server.
-func (s Server) Start(port string, maxWorkers int) {
+func (s Server) Start(port string, maxWorkers int, frontendHost string) {
 	// Create a RequestHandler to concurrently deliver client messages
 	requests := make(RequestChannel)
 	requestHandler := NewRequestHandler(requests, maxWorkers)
 	go requestHandler.Start(s.store)
 
 	// Handle incoming requests
-	http.HandleFunc("/createLobby", createLobby(s.store))
+	http.HandleFunc("/createLobby", createLobby(s.store, frontendHost))
 	http.HandleFunc("/", connectionHandler(s.store, requests, s.socketUpgrader))
 
 	log.Printf("Started server on port %s, with max workers %d\n", port, maxWorkers)
@@ -39,11 +41,10 @@ func (s Server) Start(port string, maxWorkers int) {
 }
 
 // createLobby generates and returns a new code
-func createLobby(
-	store ConnectionStore,
-) func(w http.ResponseWriter, r *http.Request) {
-
+func createLobby(store ConnectionStore, frontendHost string) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
+		//Allow CORS from frontendHost
+		w.Header().Set("Access-Control-Allow-Origin", fmt.Sprintf("%s*", frontendHost))
 		code := store.NewCode()
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(code))

@@ -12,9 +12,9 @@ import (
 )
 
 var (
-	port             = flag.String("port", os.Getenv("PORT"), "Port to host the server on")
-	maxWorkers       = flag.Int("maxWorkers", getEnvOrDefault("MAX_WORKERS", 10).(int), "Maximum number of workers handling socket requests")
-	frontendHostName = flag.String("frontendHostName", os.Getenv("FRONTEND_HOST_NAME"), "The frontend hostname")
+	port         = flag.String("port", os.Getenv("PORT"), "Port to host the server on")
+	maxWorkers   = flag.Int("maxWorkers", getEnvOrDefault("MAX_WORKERS", 10).(int), "Maximum number of workers handling socket requests")
+	frontendHost = flag.String("frontendHost", os.Getenv("FRONTEND_HOST"), "The frontend host")
 )
 
 // getEnvOrDefault tries to get an Environment variable or returns a default
@@ -38,7 +38,7 @@ func checkFlagsSet() {
 
 // checkOrigin checks a requests origin, returning true if the origin is valid.
 func checkOrigin(r *http.Request) bool {
-	return strings.Contains(r.URL.Host, *frontendHostName)
+	return strings.Contains(r.URL.Host, *frontendHost)
 }
 
 func main() {
@@ -47,5 +47,5 @@ func main() {
 
 	// Start-up the server
 	s := server.NewServer(checkOrigin)
-	s.Start(*port, *maxWorkers)
+	s.Start(*port, *maxWorkers, *frontendHost)
 }
