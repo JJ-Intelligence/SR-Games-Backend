@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -30,7 +31,7 @@ func getEnvOrDefault(key string, def interface{}) interface{} {
 func checkFlagsSet() {
 	flag.VisitAll(func(f *flag.Flag) {
 		if f.Value.String() == "" {
-			log.Fatal("Missing environment: ", f.Name)
+			log.Fatal(fmt.Sprintf("Missing environment: %s", f.Name))
 		}
 	})
 }
