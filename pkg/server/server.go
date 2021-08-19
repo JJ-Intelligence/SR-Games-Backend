@@ -1,7 +1,6 @@
 package server
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 
@@ -44,7 +43,7 @@ func (s Server) Start(port string, maxWorkers int, frontendHost string) {
 func createLobby(store ConnectionStore, frontendHost string) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		//Allow CORS from frontendHost
-		w.Header().Set("Access-Control-Allow-Origin", fmt.Sprintf("%s*", frontendHost))
+		w.Header().Set("Access-Control-Allow-Origin", frontendHost)
 		code := store.NewCode()
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(code))
