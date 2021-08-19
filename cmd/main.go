@@ -38,8 +38,8 @@ func checkFlagsSet() {
 
 // checkOrigin checks a requests origin, returning true if the origin is valid.
 func checkOrigin(r *http.Request) bool {
-	log.Println(r.URL.String())
-	return strings.Contains(r.URL.String(), *frontendHost)
+	log.Println(r.RemoteAddr)
+	return strings.Contains(r.RemoteAddr, *frontendHost)
 }
 
 func main() {
