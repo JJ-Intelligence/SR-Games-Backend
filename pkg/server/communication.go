@@ -1,12 +1,13 @@
 package server
 
 import (
-	"github.com/gorilla/websocket"
 	"hash/fnv"
 	"log"
 	"math/rand"
 	"strconv"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 // Request holds a Message and connection of a connected client.

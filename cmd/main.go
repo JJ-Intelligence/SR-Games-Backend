@@ -1,45 +1,50 @@
 package main
 
 import (
-	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/server"
+	"flag"
 	"log"
 	"net/http"
 	"os"
-	"strconv"
+	"strings"
+
+	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/server"
 )
 
-func main() {
-	// Get the PORT
-	var port string
-	if len(os.Args) > 1 {
-		port = os.Args[1]
-	} else {
-		port = os.Getenv("PORT")
-	}
+var (
+	port             = flag.String("port", os.Getenv("PORT"), "Port to host the server on")
+	maxWorkers       = flag.Int("maxWorkers", getEnvOrDefault("MAX_WORKERS", 10).(int), "Maximum number of workers handling socket requests")
+	frontendHostName = flag.String("frontendHostName", os.Getenv("FRONTEND_HOST_NAME"), "The frontend hostname")
+)
 
-	if port == "" {
-		log.Fatal("You must define a 'PORT' environment variable for running the web server")
+// getEnvOrDefault tries to get an Environment variable or returns a default
+// if it doesn't exist
+func getEnvOrDefault(key string, def interface{}) interface{} {
+	env, ok := os.LookupEnv(key)
+	if ok {
+		return env
 	}
+	return def
+}
 
-	// Get the max workers
-	maxWorkersStr := os.Getenv("MAX_WORKERS")
-	var maxWorkers int
-	if maxWorkersStr == "" {
-		maxWorkers = 10
-	} else {
-		var err error
-		maxWorkers, err = strconv.Atoi(os.Getenv("MAX_WORKERS"))
-		if err != nil {
-			log.Fatal("ERROR while passing MAX_WORKERS to integer -", err)
+// checkFlagsSet will panic if a flag has not been set
+func checkFlagsSet() {
+	flag.VisitAll(func(f *flag.Flag) {
+		if f.Value.String() == "" {
+			log.Fatal("Missing environment: ", f.Name)
 		}
-	}
-
-	s := server.NewServer(checkOrigin)
-	s.Start(port, maxWorkers)
+	})
 }
 
 // checkOrigin checks a requests origin, returning true if the origin is valid.
 func checkOrigin(r *http.Request) bool {
-	//origin := r.Header.Get("Origin") // TODO Add an origin check to the frontend url
-	return true
+	return strings.Contains(r.URL.Host, *frontendHostName)
+}
+
+func main() {
+	flag.Parse()
+	checkFlagsSet()
+
+	// Start-up the server
+	s := server.NewServer(checkOrigin)
+	s.Start(*port, *maxWorkers)
 }
