@@ -18,7 +18,7 @@ type Server struct {
 	// LobbyStore maps Lobby IDs to Lobby structs
 	Lobbys LobbyStore
 
-	ConnToPlayerStore map[ConnectionWrapper]Player
+	ConnToPlayerStore map[*ConnectionWrapper]Player
 
 	Upgrader websocket.Upgrader
 }
@@ -37,7 +37,7 @@ func (s *Server) Start(port string, maxWorkers int, frontendHost string) {
 	// Handle incoming requests
 	http.HandleFunc("/createPlayer", handlerWrapper(frontendHost, s.createPlayer()))
 	http.HandleFunc("/createLobby", handlerWrapper(frontendHost, s.createLobby()))
-	http.HandleFunc("/", s.connectionHandler())
+	http.HandleFunc("/", s.connectionReadHandler())
 
 	s.Log.Info(
 		fmt.Sprintf(
@@ -102,9 +102,9 @@ func (s *Server) createLobby() func(http.ResponseWriter, *http.Request) {
 	}
 }
 
-// connectionHandler upgrades new HTTP requests from clients to websockets,
+// connectionReadHandler upgrades new HTTP requests from clients to websockets,
 // reading in further messages from those clients.
-func (s *Server) connectionHandler() func(w http.ResponseWriter, r *http.Request) {
+func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Upgrade HTTP GET request to a socket connection
 		ws, err := s.Upgrader.Upgrade(w, r, nil)
@@ -112,11 +112,11 @@ func (s *Server) connectionHandler() func(w http.ResponseWriter, r *http.Request
 			s.Log.Info("Unable to upgrade connection", zap.Error(err))
 			return
 		}
-		conn := &SocketWrapper{socket: ws}
+		conn := &ConnectionWrapper{socket: ws, WriteChannel: make(chan Message)}
 
 		// Remove the player when their socket disconnects
 		defer func() {
-			conn.socket.Close()
+			conn.Close()
 
 			// Remove player
 			if player, ok := s.ConnToPlayerStore[conn]; ok {
@@ -151,35 +151,47 @@ func (s *Server) connectionHandler() func(w http.ResponseWriter, r *http.Request
 		} else {
 			s.Log.Info(
 				fmt.Sprintf("Lobby %s does not exist, closing connection", req.LobbyID))
+			return
 		}
 
-		// Forever handle messages from this new client
+		// Start up writing process
+		go s.connectionWriteHandler(conn, lobby)
+
+		// Forever read in messages from this new client
 		for {
-			_, bytes, err := s.socket.ReadMessage()
-			err = s.handleIncomingMessage(conn, lobby)
+			bytes, err := conn.ReadMessage()
+
 			if err != nil {
-				s.Log.Info("Client errored or disconnected", zap.Error(err))
-				return
+				if _, ok := err.(*json.UnmarshalTypeError); ok {
+					conn.WriteChannel <- Message{
+						Type:     "Error",
+						Contents: "Unable to deserialise Contents to a Content Type",
+					}
+				} else {
+					s.Log.Info("Client errored or disconnected", zap.Error(err))
+					return
+				}
+			} else {
+				lobby.RequestChannel <- Request{
+					ConnChannel: conn.WriteChannel, Data: bytes}
 			}
 		}
 	}
 }
 
-// handleIncomingMessage reads messages from a socket and sends them to the queue channel, returning an error
-// if the client has disconnected.
-func (s *Server) handleIncomingMessage(conn ConnectionWrapper, lobby *Lobby) error {
-	message, err := conn.ReadMessage()
-
-	if err == nil {
-		lobby.RequestChannel <- Request{Connection: conn, Message: message}
-	} else if _, ok := err.(*json.UnmarshalTypeError); ok {
-		conn.WriteMessage(Message{
-			Type:     "Error",
-			Contents: "Unable to deserialise Contents to a Content Type",
-		})
+func (s *Server) connectionWriteHandler(conn *ConnectionWrapper, lobby *Lobby) {
+	for {
+		message := <-conn.WriteChannel
+		switch message.Type {
+		case "CloseConnectionRequest":
+			return
+		default:
+			conn.WriteMessage(message)
+		}
 	}
-	return err
 }
+
+// TODO: Setup lobby worker thread
 
 type RequestChannel chan Request               // Channel of incoming client requests
 type WorkerRequestChannels chan RequestChannel // Channel of request channels belonging to each worker

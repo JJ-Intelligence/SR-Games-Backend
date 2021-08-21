@@ -4,29 +4,26 @@ import "github.com/gorilla/websocket"
 
 // Request holds a Message and connection of a connected client.
 type Request struct {
-	Connection ConnectionWrapper
-	Message    Message
+	ConnChannel chan Message
+	Data        []byte
 }
 
 // ConnectionWrapper wraps a client connection, handling communication.
-type ConnectionWrapper interface {
-	// ReadMessage reads a message in from the client.
-	ReadMessage() (Message, error)
-
-	// WriteMessage sends a message to the client.
-	WriteMessage(message Message) error
+type ConnectionWrapper struct {
+	socket       *websocket.Conn
+	WriteChannel chan Message
 }
 
-// SocketWrapper is a ConnectionWrapper which wraps a client websocket connection.
-type SocketWrapper struct {
-	socket *websocket.Conn
+func (c *ConnectionWrapper) ReadMessage() ([]byte, error) {
+	_, bytes, err := c.socket.ReadMessage()
+	return bytes, err
 }
 
-func (s *SocketWrapper) ReadMessage() ([]byte, error) {
-	_, bytes, err := s.socket.ReadMessage()
-	return message, err
+func (c *ConnectionWrapper) WriteMessage(message Message) error {
+	return c.socket.WriteJSON(message)
 }
 
-func (s *SocketWrapper) WriteMessage(message Message) error {
-	return s.socket.WriteJSON(message)
+func (c *ConnectionWrapper) Close() {
+	c.WriteChannel <- Message{Type: "CloseConnectionRequest"}
+	c.socket.Close()
 }

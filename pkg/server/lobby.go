@@ -15,7 +15,7 @@ type Lobby struct {
 	State interface{} // TODO: Set the GameState
 
 	// PlayerIDToConnStore stores a mapping of Player IDs to Socket connections
-	PlayerIDToConnStore map[string]ConnectionWrapper
+	PlayerIDToConnStore map[string]*ConnectionWrapper
 
 	// RequestChannel stores a channel of incoming Requests
 	RequestChannel chan Request
