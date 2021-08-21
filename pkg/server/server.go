@@ -1,81 +1,164 @@
 package server
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"go.uber.org/zap"
 )
 
 // Server stores all connection dependencies for the websocket server.
 type Server struct {
-	store          ConnectionStore
-	socketUpgrader websocket.Upgrader
+	Log *zap.Logger
+
+	// LobbyStore maps Lobby IDs to Lobby structs
+	Lobbys LobbyStore
+
+	ConnToPlayerStore map[ConnectionWrapper]Player
+
+	Upgrader websocket.Upgrader
 }
 
 // NewServer constructs a new Server instance.
-func NewServer(checkOriginFunc func(r *http.Request) bool) *Server {
+func NewServer(log *zap.Logger, checkOriginFunc func(r *http.Request) bool) *Server {
 	return &Server{
-		store:          NewMapConnectionStore(),
-		socketUpgrader: websocket.Upgrader{CheckOrigin: checkOriginFunc},
+		Log:      log,
+		Lobbys:   LobbyStore{},
+		Upgrader: websocket.Upgrader{CheckOrigin: checkOriginFunc},
 	}
 }
 
 // Start starts up the websocket server.
-func (s Server) Start(port string, maxWorkers int, frontendHost string) {
-	// Create a RequestHandler to concurrently deliver client messages
-	requests := make(RequestChannel)
-	requestHandler := NewRequestHandler(requests, maxWorkers)
-	go requestHandler.Start(s.store)
-
+func (s *Server) Start(port string, maxWorkers int, frontendHost string) {
 	// Handle incoming requests
-	http.HandleFunc("/createLobby", createLobby(s.store, frontendHost))
-	http.HandleFunc("/", connectionHandler(s.store, requests, s.socketUpgrader))
+	http.HandleFunc("/createPlayer", handlerWrapper(frontendHost, s.createPlayer()))
+	http.HandleFunc("/createLobby", handlerWrapper(frontendHost, s.createLobby()))
+	http.HandleFunc("/", s.connectionHandler())
 
-	log.Printf("Started server on port %s, with max workers %d\n", port, maxWorkers)
+	s.Log.Info(
+		fmt.Sprintf(
+			"Started server on port %s, with max workers %d\n",
+			port, maxWorkers,
+		),
+	)
 	err := http.ListenAndServe(":"+port, nil)
 	if err != nil {
-		log.Fatal("ERROR server failed during ListenAndServer -", err)
+		s.Log.Fatal("Server errored during ListenAndServer:", zap.Error(err))
 	}
 }
 
-// createLobby generates and returns a new code
-func createLobby(store ConnectionStore, frontendHost string) func(http.ResponseWriter, *http.Request) {
+// handlerWrapper wraps a handler to add the Access-Control-Allow-Origin header
+func handlerWrapper(
+	frontendHost string,
+	handler func(http.ResponseWriter, *http.Request),
+) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		//Allow CORS from frontendHost
 		w.Header().Set("Access-Control-Allow-Origin", frontendHost)
-		code := store.NewCode()
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(code))
+		handler(w, r)
 	}
 }
 
-// connectionHandler upgrades new HTTP requests from clients to websockets, reading in further messages from
-// those clients.
-func connectionHandler(
-	store ConnectionStore,
-	requests RequestChannel,
-	upgrader websocket.Upgrader,
-) func(w http.ResponseWriter, r *http.Request) {
+// createPlayer returns a new player ID
+func (s *Server) createPlayer() func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := uuid.NewString()
+		s.Log.Info("Created new Player", zap.String("playerID", id))
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(id))
+	}
+}
 
+// createLobby creates a new lobby, returning the lobby ID
+func (s *Server) createLobby() func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		lobbyID := uuid.NewString()
+		playerIDParam := r.URL.Query()["playerID"]
+
+		if len(playerIDParam) == 1 {
+			playerID := playerIDParam[0]
+			s.Lobbys.Put(
+				lobbyID,
+				&Lobby{
+					Host:                playerID,
+					PlayerIDToConnStore: make(map[string]ConnectionWrapper),
+					RequestChannel:      make(chan Request),
+				},
+			)
+			s.Log.Info(
+				"Created new Lobby",
+				zap.String("lobbyID", lobbyID),
+				zap.String("hostID", playerID),
+			)
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(lobbyID))
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+		}
+	}
+}
+
+// connectionHandler upgrades new HTTP requests from clients to websockets,
+// reading in further messages from those clients.
+func (s *Server) connectionHandler() func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Upgrade HTTP GET request to a socket connection
-		s, err := upgrader.Upgrade(w, r, nil)
+		ws, err := s.Upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			log.Println("ERROR upgrading connection -", err)
+			s.Log.Info("Unable to upgrade connection", zap.Error(err))
 			return
 		}
-		socket := &SocketWrapper{socket: s}
+		conn := &SocketWrapper{socket: ws}
+
+		// Remove the player when their socket disconnects
 		defer func() {
-			store.Disconnect(socket)
-			socket.socket.Close()
+			conn.socket.Close()
+
+			// Remove player
+			if player, ok := s.ConnToPlayerStore[conn]; ok {
+				delete(s.ConnToPlayerStore, conn)
+
+				if lobby, ok := s.Lobbys.Get(player.LobbyID); ok {
+					delete(lobby.PlayerIDToConnStore, player.PlayerID)
+				}
+			}
 		}()
+
+		// Handle the LobbyJoinRequest
+		// TODO: Pass in LobbyJoinRequest?
+		message, err := conn.ReadMessage()
+		if err != nil {
+			s.Log.Info(
+				"Client errored before LobbyJoinRequest was sent", zap.Error(err))
+			return
+		}
+
+		req := message.Contents.(LobbyJoinRequest)
+		lobby, ok := s.Lobbys.Get(req.LobbyID)
+		if ok {
+			// Add player to lobby
+			s.ConnToPlayerStore[conn] = Player{
+				PlayerID: req.PlayerID,
+				LobbyID:  req.LobbyID,
+			}
+			lobby.PlayerIDToConnStore[req.PlayerID] = conn
+			s.Log.Info(
+				fmt.Sprintf("Player %s joined Lobby %s", req.PlayerID, req.LobbyID))
+		} else {
+			s.Log.Info(
+				fmt.Sprintf("Lobby %s does not exist, closing connection", req.LobbyID))
+		}
 
 		// Forever handle messages from this new client
 		for {
-			err = handleIncomingMessage(socket, requests)
+			_, bytes, err := s.socket.ReadMessage()
+			err = s.handleIncomingMessage(conn, lobby)
 			if err != nil {
-				log.Println("Client errored or disconnected", err)
+				s.Log.Info("Client errored or disconnected", zap.Error(err))
 				return
 			}
 		}
@@ -84,18 +167,18 @@ func connectionHandler(
 
 // handleIncomingMessage reads messages from a socket and sends them to the queue channel, returning an error
 // if the client has disconnected.
-func handleIncomingMessage(conn ConnectionWrapper, requests RequestChannel) error {
+func (s *Server) handleIncomingMessage(conn ConnectionWrapper, lobby *Lobby) error {
 	message, err := conn.ReadMessage()
 
-	if websocket.IsUnexpectedCloseError(err) {
-		log.Println("Client errored or disconnected", err)
-		return err
-	} else if err != nil {
-		log.Println("ERROR reading incoming message -", err)
-	} else {
-		requests <- Request{Connection: conn, Message: message}
+	if err == nil {
+		lobby.RequestChannel <- Request{Connection: conn, Message: message}
+	} else if _, ok := err.(*json.UnmarshalTypeError); ok {
+		conn.WriteMessage(Message{
+			Type:     "Error",
+			Contents: "Unable to deserialise Contents to a Content Type",
+		})
 	}
-	return nil
+	return err
 }
 
 type RequestChannel chan Request               // Channel of incoming client requests
