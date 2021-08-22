@@ -18,7 +18,7 @@ type ConnectionWrapper struct {
 
 func (c *ConnectionWrapper) ReadMessage() (Message, error) {
 	var message Message
-	err := c.Socket.ReadJSON(message)
+	err := c.Socket.ReadJSON(&message)
 	return message, err
 }
 
