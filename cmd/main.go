@@ -49,7 +49,7 @@ func main() {
 	defer log.Sync()
 
 	// Start-up the server
-	log.Info(fmt.Sprintf("Starting server on port %s", port))
+	log.Info(fmt.Sprintf("Starting server on port %s", *port))
 	s := server.NewServer(log, checkOrigin)
 	s.Start(*port, *maxWorkers, *frontendHost)
 }
