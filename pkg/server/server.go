@@ -3,8 +3,10 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
+
+	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/comms"
+	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/lobby"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -16,9 +18,9 @@ type Server struct {
 	Log *zap.Logger
 
 	// LobbyStore maps Lobby IDs to Lobby structs
-	Lobbys LobbyStore
+	Lobbys lobby.LobbyStore
 
-	ConnToPlayerStore map[*ConnectionWrapper]Player
+	ConnToPlayerStore map[*comms.ConnectionWrapper]lobby.Player
 
 	Upgrader websocket.Upgrader
 }
@@ -27,7 +29,7 @@ type Server struct {
 func NewServer(log *zap.Logger, checkOriginFunc func(r *http.Request) bool) *Server {
 	return &Server{
 		Log:      log,
-		Lobbys:   LobbyStore{},
+		Lobbys:   lobby.LobbyStore{},
 		Upgrader: websocket.Upgrader{CheckOrigin: checkOriginFunc},
 	}
 }
@@ -81,14 +83,15 @@ func (s *Server) createLobby() func(http.ResponseWriter, *http.Request) {
 
 		if len(playerIDParam) == 1 {
 			playerID := playerIDParam[0]
-			s.Lobbys.Put(
-				lobbyID,
-				&Lobby{
-					Host:                playerID,
-					PlayerIDToConnStore: make(map[string]ConnectionWrapper),
-					RequestChannel:      make(chan Request),
-				},
-			)
+			l := &lobby.Lobby{
+				Log:                 s.Log,
+				Host:                playerID,
+				PlayerIDToConnStore: make(map[string]*comms.ConnectionWrapper),
+				RequestChannel:      make(chan comms.Request),
+			}
+			s.Lobbys.Put(lobbyID, l)
+			go l.LobbyRequestHandler()
+
 			s.Log.Info(
 				"Created new Lobby",
 				zap.String("lobbyID", lobbyID),
@@ -112,74 +115,124 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 			s.Log.Info("Unable to upgrade connection", zap.Error(err))
 			return
 		}
-		conn := &ConnectionWrapper{socket: ws, WriteChannel: make(chan Message)}
+		conn := &comms.ConnectionWrapper{Socket: ws, WriteChannel: make(chan comms.Message)}
 
 		// Remove the player when their socket disconnects
 		defer func() {
 			conn.Close()
 
-			// Remove player
 			if player, ok := s.ConnToPlayerStore[conn]; ok {
 				delete(s.ConnToPlayerStore, conn)
-
 				if lobby, ok := s.Lobbys.Get(player.LobbyID); ok {
 					delete(lobby.PlayerIDToConnStore, player.PlayerID)
 				}
 			}
 		}()
 
-		// Handle the LobbyJoinRequest
-		// TODO: Pass in LobbyJoinRequest?
-		message, err := conn.ReadMessage()
-		if err != nil {
-			s.Log.Info(
-				"Client errored before LobbyJoinRequest was sent", zap.Error(err))
-			return
-		}
+		// Start up writer process
+		go s.connectionWriteHandler(conn)
 
-		req := message.Contents.(LobbyJoinRequest)
-		lobby, ok := s.Lobbys.Get(req.LobbyID)
-		if ok {
-			// Add player to lobby
-			s.ConnToPlayerStore[conn] = Player{
-				PlayerID: req.PlayerID,
-				LobbyID:  req.LobbyID,
-			}
-			lobby.PlayerIDToConnStore[req.PlayerID] = conn
-			s.Log.Info(
-				fmt.Sprintf("Player %s joined Lobby %s", req.PlayerID, req.LobbyID))
-		} else {
-			s.Log.Info(
-				fmt.Sprintf("Lobby %s does not exist, closing connection", req.LobbyID))
-			return
-		}
+		// Wait for a successful LobbyJoinRequest
+		var (
+			l        *lobby.Lobby
+			playerID string
+		)
+		err = s.parseMessageLoop(conn, func(message comms.Message) (bool, error) {
+			// Wait for a LobbyJoinRequest
+			if message.Type != "LobbyJoinRequest" {
+				conn.WriteChannel <- comms.ToMessage(comms.ErrorResponse{
+					Reason: "First message should be a LobbyJoinRequest",
+				})
+			} else {
+				// Parse the Message contents to a LobbyJoinRequest
+				var req lobby.LobbyJoinRequest
+				err = json.Unmarshal(message.Contents, &req)
 
-		// Start up writing process
-		go s.connectionWriteHandler(conn, lobby)
-
-		// Forever read in messages from this new client
-		for {
-			bytes, err := conn.ReadMessage()
-
-			if err != nil {
-				if _, ok := err.(*json.UnmarshalTypeError); ok {
-					conn.WriteChannel <- Message{
-						Type:     "Error",
-						Contents: "Unable to deserialise Contents to a Content Type",
+				if err == nil {
+					// Check if the lobby exists
+					l, ok := s.Lobbys.Get(req.LobbyID)
+					if ok {
+						// Add the player to the lobby if it exists
+						s.ConnToPlayerStore[conn] = lobby.Player(req)
+						l.PlayerIDToConnStore[req.PlayerID] = conn
+						playerID = req.PlayerID
+						l.RequestChannel <- comms.Request{
+							ConnChannel: conn.WriteChannel,
+							PlayerID:    playerID,
+							Message:     comms.ToMessage(lobby.PlayerJoinedEvent{}),
+						}
+						s.Log.Info(
+							fmt.Sprintf(
+								"Player %s joined Lobby %s",
+								req.PlayerID, req.LobbyID,
+							),
+						)
+						return false, nil
+					} else {
+						conn.WriteChannel <- comms.ToMessage(comms.ErrorResponse{
+							Reason: "Lobby does not exist",
+						})
 					}
 				} else {
-					s.Log.Info("Client errored or disconnected", zap.Error(err))
-					return
+					conn.WriteChannel <- comms.ToMessage(comms.ErrorResponse{
+						Reason: "Unable to parse message contents",
+					})
 				}
+			}
+			return true, nil
+		})
+		if err != nil {
+			return
+		}
+
+		// Read in messages and push them onto the Lobby RequestChannel
+		s.parseMessageLoop(conn, func(message comms.Message) (bool, error) {
+			switch message.Type {
+			case "LobbyLeaveRequest":
+				delete(l.PlayerIDToConnStore, playerID)
+				l.RequestChannel <- comms.Request{
+					ConnChannel: conn.WriteChannel,
+					PlayerID:    playerID,
+					Message:     comms.ToMessage(lobby.PlayerLeftEvent{}),
+				}
+				return false, nil
+			default:
+				l.RequestChannel <- comms.Request{
+					ConnChannel: conn.WriteChannel,
+					PlayerID:    playerID,
+					Message:     message,
+				}
+				return true, nil
+			}
+		})
+	}
+}
+
+func (s *Server) parseMessageLoop(
+	conn *comms.ConnectionWrapper,
+	parseMessageCB func(message comms.Message) (bool, error),
+) error {
+	for {
+		message, err := conn.ReadMessage()
+
+		if err != nil {
+			if _, ok := err.(*json.UnmarshalTypeError); ok {
+				conn.WriteChannel <- comms.ToMessage(comms.ErrorResponse{
+					Reason: "Unable to deserialise message",
+				})
 			} else {
-				lobby.RequestChannel <- Request{
-					ConnChannel: conn.WriteChannel, Data: bytes}
+				s.Log.Info("Client errored or disconnected", zap.Error(err))
+				return err
+			}
+		} else {
+			if ok, err := parseMessageCB(message); !ok {
+				return err
 			}
 		}
 	}
 }
 
-func (s *Server) connectionWriteHandler(conn *ConnectionWrapper, lobby *Lobby) {
+func (s *Server) connectionWriteHandler(conn *comms.ConnectionWrapper) {
 	for {
 		message := <-conn.WriteChannel
 		switch message.Type {
@@ -187,70 +240,6 @@ func (s *Server) connectionWriteHandler(conn *ConnectionWrapper, lobby *Lobby) {
 			return
 		default:
 			conn.WriteMessage(message)
-		}
-	}
-}
-
-// TODO: Setup lobby worker thread
-
-type RequestChannel chan Request               // Channel of incoming client requests
-type WorkerRequestChannels chan RequestChannel // Channel of request channels belonging to each worker
-
-// RequestHandler stores request and worker channels for concurrently handling incoming client requests.
-type RequestHandler struct {
-	requests RequestChannel
-	workers  WorkerRequestChannels
-}
-
-func NewRequestHandler(requests RequestChannel, maxWorkers int) *RequestHandler {
-	return &RequestHandler{
-		requests: requests,
-		workers:  make(WorkerRequestChannels, maxWorkers),
-	}
-}
-
-// Start creates concurrent worker functions which handle incoming requests, and passes incoming requests to
-// free workers.
-func (h *RequestHandler) Start(store ConnectionStore) {
-	// Create workers
-	for i := 0; i < cap(h.workers); i++ {
-		go runRequestWorker(h.workers, make(RequestChannel), store)
-	}
-
-	// Pass incoming requests to workers
-	for {
-		req := <-h.requests
-
-		// Concurrently find a free worker and add this request to their RequestChannel
-		go func() {
-			worker := <-h.workers
-			worker <- req
-		}()
-	}
-}
-
-// runRequestWorker forever handles requests from the given RequestChannel.
-func runRequestWorker(workers WorkerRequestChannels, requests RequestChannel, store ConnectionStore) {
-	for {
-		// Register as a worker
-		workers <- requests
-
-		// Wait for a request to handle
-		r := <-requests
-
-		switch r.Message.Type {
-		case "Connect":
-			// Connect the new client
-			store.Connect(r.Message.Code, r.Connection)
-
-		default:
-			// Broadcast message to all clients within the same room
-			for _, conn := range store.GetConnectionsByCode(r.Message.Code) {
-				err := conn.WriteMessage(r.Message)
-				if err != nil {
-					log.Printf("ERROR sending message of type '%s' - %s\n", r.Message.Type, err)
-				}
-			}
 		}
 	}
 }
