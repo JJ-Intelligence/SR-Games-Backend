@@ -87,8 +87,8 @@ func (s *Server) createLobby() func(http.ResponseWriter, *http.Request) {
 			l := &lobby.Lobby{
 				Log:                 s.Log,
 				Host:                playerID,
-				PlayerIDToConnStore: make(map[string]*comms.ConnectionWrapper),
-				RequestChannel:      make(chan comms.Request),
+				PlayerIDToConnStore: map[string]*comms.ConnectionWrapper{},
+				RequestChannel:      make(chan comms.Request, 10),
 			}
 			s.Lobbys.Put(lobbyID, l)
 			go l.LobbyRequestHandler()
