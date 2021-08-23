@@ -29,9 +29,10 @@ type Server struct {
 // NewServer constructs a new Server instance.
 func NewServer(log *zap.Logger, checkOriginFunc func(r *http.Request) bool) *Server {
 	return &Server{
-		Log:      log,
-		Lobbys:   lobby.LobbyStore{},
-		Upgrader: websocket.Upgrader{CheckOrigin: checkOriginFunc},
+		Log:               log,
+		Lobbys:            lobby.LobbyStore{},
+		ConnToPlayerStore: make(map[*comms.ConnectionWrapper]lobby.Player),
+		Upgrader:          websocket.Upgrader{CheckOrigin: checkOriginFunc},
 	}
 }
 
