@@ -141,7 +141,8 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 			// Wait for a LobbyJoinRequest
 			if message.Type != "LobbyJoinRequest" {
 				conn.WriteChannel <- comms.ToMessage(comms.ErrorResponse{
-					Reason: "First message should be a LobbyJoinRequest",
+					Reason: fmt.Sprintf(
+						"First message should be a LobbyJoinRequest but was %s", message.Type),
 				})
 			} else {
 				// Parse the Message contents to a LobbyJoinRequest
