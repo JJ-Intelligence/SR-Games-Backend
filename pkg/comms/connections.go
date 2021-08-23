@@ -1,6 +1,10 @@
 package comms
 
-import "github.com/gorilla/websocket"
+import (
+	"encoding/json"
+
+	"github.com/gorilla/websocket"
+)
 
 // Request holds a Message and connection of a connected client.
 type Request struct {
@@ -23,7 +27,16 @@ func (c *ConnectionWrapper) ReadMessage() (Message, error) {
 }
 
 func (c *ConnectionWrapper) WriteMessage(message Message) error {
-	return c.Socket.WriteJSON(message)
+	// Unmarshal contents into a map
+	var contents map[string]interface{}
+	json.Unmarshal(message.Contents, &contents)
+
+	// Return a marshalled map
+	data := map[string]interface{}{
+		"type":     message.Type,
+		"contents": contents,
+	}
+	return c.Socket.WriteJSON(data)
 }
 
 func (c *ConnectionWrapper) Close() {
