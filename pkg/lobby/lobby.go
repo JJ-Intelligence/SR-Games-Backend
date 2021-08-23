@@ -1,11 +1,11 @@
 package lobby
 
 import (
-	"encoding/json"
 	"sync"
 
 	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/comms"
 	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/game"
+	"github.com/mitchellh/mapstructure"
 
 	"go.uber.org/zap"
 )
@@ -48,7 +48,13 @@ func (l *Lobby) LobbyRequestHandler() {
 		case "LobbyStartGameRequest":
 			// Host starts a Game
 			var contents LobbyStartGameRequest
-			json.Unmarshal(req.Message.Contents, &contents)
+			err := mapstructure.Decode(req.Message.Contents, &contents)
+			if err != nil {
+				req.ConnChannel <- comms.ToMessage(comms.ErrorResponse{
+					Reason: "Unable to parse LobbyStartGameRequest %s",
+					Error:  err,
+				})
+			}
 
 			if req.PlayerID == l.Host {
 				state, err := game.NewGameState(contents.Game, len(l.PlayerIDToConnStore))

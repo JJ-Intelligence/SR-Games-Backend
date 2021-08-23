@@ -7,6 +7,7 @@ import (
 
 	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/comms"
 	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/lobby"
+	"github.com/mitchellh/mapstructure"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -147,7 +148,7 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 			} else {
 				// Parse the Message contents to a LobbyJoinRequest
 				var req lobby.LobbyJoinRequest
-				err = json.Unmarshal(message.Contents, &req)
+				err = mapstructure.Decode(message.Contents, &req)
 
 				if err == nil {
 					// Check if the lobby exists
@@ -218,9 +219,9 @@ func (s *Server) parseMessageLoop(
 
 		if err != nil {
 			if _, ok := err.(*json.UnmarshalTypeError); ok {
-				s.Log.Info("Unable to deserialise client message", zap.Error(err))
 				conn.WriteChannel <- comms.ToMessage(comms.ErrorResponse{
 					Reason: "Unable to deserialise message",
+					Error:  err,
 				})
 			} else {
 				s.Log.Info("Client errored or disconnected", zap.Error(err))

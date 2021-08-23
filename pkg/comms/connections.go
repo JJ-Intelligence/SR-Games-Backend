@@ -1,8 +1,6 @@
 package comms
 
 import (
-	"encoding/json"
-
 	"github.com/gorilla/websocket"
 )
 
@@ -27,16 +25,7 @@ func (c *ConnectionWrapper) ReadMessage() (Message, error) {
 }
 
 func (c *ConnectionWrapper) WriteMessage(message Message) error {
-	// Unmarshal contents into a map
-	var contents map[string]interface{}
-	json.Unmarshal(message.Contents, &contents)
-
-	// Return a marshalled map
-	data := map[string]interface{}{
-		"type":     message.Type,
-		"contents": contents,
-	}
-	return c.Socket.WriteJSON(data)
+	return c.Socket.WriteJSON(message)
 }
 
 func (c *ConnectionWrapper) Close() {
