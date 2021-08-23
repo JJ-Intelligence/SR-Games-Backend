@@ -176,7 +176,7 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 					}
 				} else {
 					conn.WriteChannel <- comms.ToMessage(comms.ErrorResponse{
-						Reason: "Unable to parse message contents",
+						Reason: "Unable to parse message contents to LobbyJoinRequest",
 					})
 				}
 			}
@@ -218,6 +218,7 @@ func (s *Server) parseMessageLoop(
 
 		if err != nil {
 			if _, ok := err.(*json.UnmarshalTypeError); ok {
+				s.Log.Info("Unable to deserialise client message", zap.Error(err))
 				conn.WriteChannel <- comms.ToMessage(comms.ErrorResponse{
 					Reason: "Unable to deserialise message",
 				})
