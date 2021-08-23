@@ -82,7 +82,7 @@ func (s *Server) createLobby() func(http.ResponseWriter, *http.Request) {
 		lobbyID := uuid.NewString()
 		playerIDParam := r.URL.Query()["playerID"]
 
-		if len(playerIDParam) == 1 {
+		if len(playerIDParam) == 1 && playerIDParam[0] != "undefined" {
 			playerID := playerIDParam[0]
 			l := &lobby.Lobby{
 				Log:                 s.Log,
@@ -110,6 +110,8 @@ func (s *Server) createLobby() func(http.ResponseWriter, *http.Request) {
 // reading in further messages from those clients.
 func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("DEBUG")
+		fmt.Println(s)
 		// Upgrade HTTP GET request to a socket connection
 		ws, err := s.Upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -154,6 +156,8 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 					// Check if the lobby exists
 					l, ok := s.Lobbys.Get(req.LobbyID)
 					if ok {
+						fmt.Println("DEBUG 2")
+						fmt.Println(req)
 						// Add the player to the lobby if it exists
 						s.ConnToPlayerStore[conn] = lobby.Player(req)
 						l.PlayerIDToConnStore[req.PlayerID] = conn
