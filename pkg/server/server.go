@@ -110,8 +110,6 @@ func (s *Server) createLobby() func(http.ResponseWriter, *http.Request) {
 // reading in further messages from those clients.
 func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("DEBUG")
-		fmt.Println(s)
 		// Upgrade HTTP GET request to a socket connection
 		ws, err := s.Upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -156,8 +154,6 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 					// Check if the lobby exists
 					l, ok := s.Lobbys.Get(req.LobbyID)
 					if ok {
-						fmt.Println("DEBUG 2")
-						fmt.Println(req)
 						// Add the player to the lobby if it exists
 						s.ConnToPlayerStore[conn] = lobby.Player(req)
 						l.PlayerIDToConnStore[req.PlayerID] = conn
@@ -176,7 +172,7 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 						return false, nil
 					} else {
 						conn.WriteChannel <- comms.ToMessage(comms.ErrorResponse{
-							Reason: "Lobby does not exist",
+							Reason: fmt.Sprintf("Lobby %s does not exist", req.LobbyID),
 						})
 					}
 				} else {
