@@ -14,6 +14,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const CHANNEL_BUFFER_LEN = 10
+
 // Server stores all connection dependencies for the websocket server.
 type Server struct {
 	Log *zap.Logger
@@ -83,13 +85,13 @@ func (s *Server) createLobby() func(http.ResponseWriter, *http.Request) {
 		lobbyID := uuid.NewString()
 		playerIDParam := r.URL.Query()["playerID"]
 
-		if len(playerIDParam) == 1 && playerIDParam[0] != "undefined" {
+		if len(playerIDParam) == 1 && lobby.IsValidPlayerID(playerIDParam[0]) {
 			playerID := playerIDParam[0]
 			l := &lobby.Lobby{
 				Log:                 s.Log,
 				Host:                playerID,
-				PlayerIDToConnStore: map[string]*comms.ConnectionWrapper{},
-				RequestChannel:      make(chan comms.Request, 10),
+				PlayerIDToConnStore: make(map[string]*comms.ConnectionWrapper),
+				RequestChannel:      make(chan comms.Request, CHANNEL_BUFFER_LEN),
 			}
 			s.Lobbys.Put(lobbyID, l)
 			go l.LobbyRequestHandler()
@@ -117,7 +119,10 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 			s.Log.Info("Unable to upgrade connection", zap.Error(err))
 			return
 		}
-		conn := &comms.ConnectionWrapper{Socket: ws, WriteChannel: make(chan comms.Message)}
+		conn := &comms.ConnectionWrapper{
+			Socket:       ws,
+			WriteChannel: make(chan comms.Message, CHANNEL_BUFFER_LEN),
+		}
 
 		// Remove the player when their socket disconnects
 		defer func() {
@@ -152,28 +157,34 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 				err = mapstructure.Decode(message.Contents, &req)
 
 				if err == nil {
-					// Check if the lobby exists
-					l, ok := s.Lobbys.Get(req.LobbyID)
-					if ok {
-						// Add the player to the lobby if it exists
-						s.ConnToPlayerStore[conn] = lobby.Player(req)
-						l.PlayerIDToConnStore[req.PlayerID] = conn
-						playerID = req.PlayerID
-						l.RequestChannel <- comms.Request{
-							ConnChannel: conn.WriteChannel,
-							PlayerID:    playerID,
-							Message:     comms.ToMessage(lobby.PlayerJoinedEvent{}),
+					if lobby.IsValidPlayerID(req.PlayerID) {
+						// Check if the lobby exists
+						l, ok := s.Lobbys.Get(req.LobbyID)
+						if ok {
+							// Add the player to the lobby if it exists
+							conn.PlayerID = req.PlayerID
+							s.ConnToPlayerStore[conn] = lobby.Player(req)
+							l.PlayerIDToConnStore[req.PlayerID] = conn
+							l.RequestChannel <- comms.Request{
+								ConnChannel: conn.WriteChannel,
+								PlayerID:    req.PlayerID,
+								Message:     comms.ToMessage(lobby.PlayerJoinedEvent{}),
+							}
+							s.Log.Info(
+								fmt.Sprintf(
+									"Player %s joined Lobby %s",
+									req.PlayerID, req.LobbyID,
+								),
+							)
+							return false, nil
+						} else {
+							conn.WriteChannel <- comms.ToMessage(comms.ErrorResponse{
+								Reason: fmt.Sprintf("Lobby %s does not exist", req.LobbyID),
+							})
 						}
-						s.Log.Info(
-							fmt.Sprintf(
-								"Player %s joined Lobby %s",
-								req.PlayerID, req.LobbyID,
-							),
-						)
-						return false, nil
 					} else {
 						conn.WriteChannel <- comms.ToMessage(comms.ErrorResponse{
-							Reason: fmt.Sprintf("Lobby %s does not exist", req.LobbyID),
+							Reason: fmt.Sprintf("Invalid player ID %s", req.PlayerID),
 						})
 					}
 				} else {

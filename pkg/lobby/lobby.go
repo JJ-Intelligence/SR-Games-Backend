@@ -5,6 +5,7 @@ import (
 
 	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/comms"
 	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/game"
+	"github.com/google/uuid"
 	"github.com/mitchellh/mapstructure"
 
 	"go.uber.org/zap"
@@ -13,6 +14,11 @@ import (
 type Player struct {
 	PlayerID string
 	LobbyID  string
+}
+
+func IsValidPlayerID(playerID string) bool {
+	_, err := uuid.FromBytes([]byte(playerID))
+	return err == nil
 }
 
 type Lobby struct {
@@ -54,6 +60,7 @@ func (l *Lobby) LobbyRequestHandler() {
 					Reason: "Unable to parse LobbyStartGameRequest %s",
 					Error:  err,
 				})
+				continue
 			}
 
 			if req.PlayerID == l.Host {
