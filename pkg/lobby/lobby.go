@@ -17,7 +17,7 @@ type Player struct {
 }
 
 func IsValidPlayerID(playerID string) bool {
-	_, err := uuid.FromBytes([]byte(playerID))
+	_, err := uuid.Parse(playerID)
 	return err == nil
 }
 
