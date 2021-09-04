@@ -212,7 +212,7 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 
 		// Keep websocket conection alive by sending a ping every 50 seconds
 		// (Heroku closes connections after 55s)
-		pingAfterTimeout(conn.WriteChannel)
+		pingAfterTimeout(conn)
 
 		// Read in messages and push them onto the Lobby RequestChannel
 		s.parseMessageLoop(conn, func(message comms.Message) (bool, error) {
@@ -237,10 +237,12 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 	}
 }
 
-func pingAfterTimeout(clientWriteChan chan comms.Message) {
+func pingAfterTimeout(conn *comms.ConnectionWrapper) {
 	time.AfterFunc(PING_TIMEOUT, func() {
-		clientWriteChan <- comms.ToMessage(comms.Ping{})
-		pingAfterTimeout(clientWriteChan)
+		err := conn.WriteMessage(comms.ToMessage(comms.Ping{}))
+		if err == nil {
+			pingAfterTimeout(conn)
+		}
 	})
 }
 
