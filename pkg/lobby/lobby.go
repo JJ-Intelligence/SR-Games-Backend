@@ -1,6 +1,7 @@
 package lobby
 
 import (
+	"fmt"
 	"sort"
 	"sync"
 
@@ -44,11 +45,13 @@ func (l *Lobby) LobbyRequestHandler() {
 		switch req.Message.Type {
 		case "PlayerJoinedEvent", "PlayerLeftEvent":
 			// New player joins the lobby
+			fmt.Println(l.PlayerIDToConnStore)
 			players := make([]string, len(l.PlayerIDToConnStore)-1)
 			for player := range l.PlayerIDToConnStore {
 				players = append(players, player)
 			}
 			sort.Strings(players)
+			fmt.Println(players)
 
 			l.broadcastMessage(LobbyPlayerListBroadcast{
 				PlayerIDs: players,
