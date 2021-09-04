@@ -8,6 +8,7 @@ import (
 
 	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/comms"
 	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/config"
+	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/game"
 	"github.com/google/uuid"
 	"github.com/mitchellh/mapstructure"
 
@@ -32,7 +33,7 @@ type Lobby struct {
 	// State of the current game
 	GameName        string
 	GameState       interface{}
-	GameRequestChan chan GameRequest
+	GameRequestChan chan game.GameRequest
 
 	// PlayerIDToConnStore stores a mapping of Player IDs to Socket connections
 	PlayerIDToConnStore map[string]*comms.ConnectionWrapper
@@ -75,7 +76,7 @@ func (l *Lobby) LobbyRequestHandler(config *config.Config) {
 						// Set the game
 						l.GameName = contents.Game
 						l.GameState = state
-						l.GameRequestChan = make(chan GameRequest)
+						l.GameRequestChan = make(chan game.GameRequest)
 						go l.GameRequestHandler()
 						defer close(l.GameRequestChan)
 					} else {
@@ -146,7 +147,10 @@ func (l *Lobby) GameRequestHandler() {
 	for {
 		req := <-l.GameRequestChan
 		l.broadcastMessageToPlayers(
-			comms.Message{"Game/" + req.Message.Type, req.Message.Contents},
+			comms.Message{
+				Type:     "Game/" + req.Message.Type,
+				Contents: req.Message.Contents,
+			},
 			req.Players,
 		)
 	}

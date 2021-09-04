@@ -16,21 +16,21 @@ COPY . .
 # Build binary (backend.exe) inside container
 RUN CGO_ENABLED=0 GOOS=linux go build -o backend.exe cmd/main.go
 
+# Build TicTacToe plugin inside container
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -buildmode=plugin \
+    -o tictactoe.so \
+    plugins/games/tictactoe/game.go
+
 # Create production image
 FROM scratch
 COPY --from=builder /sr-games-backend/backend.exe /backend.exe
-ENV PORT 8080
-EXPOSE 8080
-CMD ["./backend.exe"]
+COPY --from=builder /sr-games-backend/config.yaml /config.yaml
+COPY --from=builder /sr-games-backend/tictactoe.so /plugins/games/tictactoe.so
 
-#FROM alpine
-#RUN apk add --no-cache ca-certificates
-#
-## Copy binary to production image
-#COPY --from=builder /backend.exe /
-#
-## Set environment variables
-#ENV PORT 8080
-#
-## Run project
-#CMD ["/backend"]
+ENV FRONTEND_HOST https://sr-games.herokuapp.com
+ENV CONFIG_PATH /config.yaml
+
+ENV PORT 80
+EXPOSE 80
+CMD ["./backend.exe"]

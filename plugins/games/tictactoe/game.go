@@ -3,7 +3,7 @@ package tictactoe
 import (
 	"fmt"
 
-	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/comms"
+	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/game"
 )
 
 const NUM_PLAYERS = 2
@@ -13,7 +13,7 @@ type State struct {
 	Board   [3][3]rune
 }
 
-func NewState(players []string) (*State, error) {
+func NewState(players []string) (interface{}, error) {
 	if len(players) != NUM_PLAYERS {
 		return nil, fmt.Errorf("invalid number of players, should be %d", NUM_PLAYERS)
 	}
@@ -24,13 +24,13 @@ func NewState(players []string) (*State, error) {
 	}, nil
 }
 
-func (s *State) HandleRequest(
-	state State,
-	playerID,
-	messageType,
-	messageContents string,
-) (*comms.Message, []string) {
-	switch messageType {
-	case 
-	}
+func HandleRequest(
+	gameChan chan game.GameRequest,
+	state interface{},
+	player,
+	messageType string,
+	contents interface{},
+) {
+	// TODO: implement this
+	return
 }

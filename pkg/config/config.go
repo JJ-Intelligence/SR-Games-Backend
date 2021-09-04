@@ -5,7 +5,7 @@ import (
 	"io/ioutil"
 	"plugin"
 
-	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/comms"
+	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/game"
 	"gopkg.in/yaml.v2"
 )
 
@@ -14,38 +14,7 @@ type RawYamlConfig struct {
 }
 
 type Config struct {
-	Games map[string]Game
-}
-
-type GameRequest struct {
-	Players []string
-	Message comms.Message
-}
-
-type newStateFunc func(players []string) (interface{}, error)
-type handleRequestFunc func(
-	gameChan chan GameRequest, state interface{},
-	player, messageType string, contents interface{})
-
-type Game struct {
-	NewState      newStateFunc
-	HandleRequest handleRequestFunc
-}
-
-func NewGame(name string, p *plugin.Plugin) Game {
-	newState, err := p.Lookup("NewState")
-	if err != nil {
-		panic(fmt.Sprintf("NewState function does not exist for plugin %s", name))
-	}
-	handleRequest, err := p.Lookup("HandleRequest")
-	if err != nil {
-		panic(fmt.Sprintf("HandleRequest function does not exist for plugin %s", name))
-	}
-
-	return Game{
-		NewState:      newState.(newStateFunc),
-		HandleRequest: handleRequest.(handleRequestFunc),
-	}
+	Games map[string]game.Game
 }
 
 func ParseConfig(path string) *Config {
@@ -60,13 +29,13 @@ func ParseConfig(path string) *Config {
 		panic("Unable to parse yaml config")
 	}
 
-	games := make(map[string]Game)
+	games := make(map[string]game.Game)
 	for name, pluginPath := range rawConfig.Games {
 		p, err := plugin.Open(pluginPath)
 		if err != nil {
 			panic(fmt.Sprintf("Unable to load game plugin: %e", err))
 		}
-		games[name] = NewGame(name, p)
+		games[name] = game.NewGame(name, p)
 	}
 	return &Config{Games: games}
 }
