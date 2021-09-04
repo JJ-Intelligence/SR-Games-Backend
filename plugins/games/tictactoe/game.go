@@ -2,6 +2,8 @@ package tictactoe
 
 import (
 	"fmt"
+
+	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/comms"
 )
 
 const NUM_PLAYERS = 2
@@ -20,4 +22,15 @@ func NewState(players []string) (*State, error) {
 		Players: players,
 		Board:   [3][3]rune{},
 	}, nil
+}
+
+func (s *State) HandleRequest(
+	state State,
+	playerID,
+	messageType,
+	messageContents string,
+) (*comms.Message, []string) {
+	switch messageType {
+	case 
+	}
 }

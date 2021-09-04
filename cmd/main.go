@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/config"
 	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/server"
 	"go.uber.org/zap"
 )
@@ -15,6 +16,7 @@ var (
 	port         = flag.String("port", os.Getenv("PORT"), "Port to host the server on")
 	maxWorkers   = flag.Int("maxWorkers", getEnvOrDefault("MAX_WORKERS", 10).(int), "Maximum number of workers handling socket requests")
 	frontendHost = flag.String("frontendHost", os.Getenv("FRONTEND_HOST"), "The frontend host")
+	configPath   = flag.String("configPath", os.Getenv("CONFIG_PATH"), "Path to the yaml config")
 )
 
 // getEnvOrDefault tries to get an Environment variable or returns a default
@@ -48,8 +50,11 @@ func main() {
 	log, _ := zap.NewProduction()
 	defer log.Sync()
 
+	// Parse the config
+	config := config.ParseConfig(*configPath)
+
 	// Start-up the server
 	log.Info(fmt.Sprintf("Starting server on port %s", *port))
-	s := server.NewServer(log, checkOrigin)
+	s := server.NewServer(log, checkOrigin, config)
 	s.Start(*port, *maxWorkers, *frontendHost)
 }

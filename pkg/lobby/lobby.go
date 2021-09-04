@@ -1,11 +1,13 @@
 package lobby
 
 import (
+	"fmt"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/comms"
-	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/game"
+	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/config"
 	"github.com/google/uuid"
 	"github.com/mitchellh/mapstructure"
 
@@ -27,8 +29,10 @@ type Lobby struct {
 	// Host is the host's player ID
 	Host string
 
-	// State is the state of the current game
-	State *game.GameState
+	// State of the current game
+	GameName        string
+	GameState       interface{}
+	GameRequestChan chan GameRequest
 
 	// PlayerIDToConnStore stores a mapping of Player IDs to Socket connections
 	PlayerIDToConnStore map[string]*comms.ConnectionWrapper
@@ -38,10 +42,10 @@ type Lobby struct {
 }
 
 func (l *Lobby) Close() {
-	l.broadcastMessage(LobbyClosedBroadcast{})
+	l.broadcastMessageToLobby(LobbyClosedBroadcast{})
 }
 
-func (l *Lobby) LobbyRequestHandler() {
+func (l *Lobby) LobbyRequestHandler(config *config.Config) {
 	for {
 		req := <-l.RequestChannel
 
@@ -51,48 +55,79 @@ func (l *Lobby) LobbyRequestHandler() {
 			players := l.getPlayersList()
 			sort.Strings(players)
 
-			l.broadcastMessage(LobbyPlayerListBroadcast{
+			l.broadcastMessageToLobby(LobbyPlayerListBroadcast{
 				PlayerIDs: players,
 			})
+
 		case "LobbyStartGameRequest":
 			// Host starts a Game
 			var contents LobbyStartGameRequest
 			err := mapstructure.Decode(req.Message.Contents, &contents)
 			if err != nil {
-				req.ConnChannel <- comms.ToMessage(comms.ErrorResponse{
-					Reason: "Unable to parse LobbyStartGameRequest %s",
-					Error:  err,
-				})
+				req.Error("Unable to parse LobbyStartGameRequest", err)
 				continue
 			}
 
 			if req.PlayerID == l.Host {
-
-				state, err := game.NewGameState(contents.Game, l.getPlayersList())
-				if err == nil {
-					req.ConnChannel <- comms.ToMessage(LobbyStartGameResponse{
-						Status: false,
-						Reason: err.Error(),
-					})
+				if gamePlugin, ok := config.Games[contents.Game]; ok {
+					state, err := gamePlugin.NewState(l.getPlayersList())
+					if err == nil {
+						// Set the game
+						l.GameName = contents.Game
+						l.GameState = state
+						l.GameRequestChan = make(chan GameRequest)
+						go l.GameRequestHandler()
+						defer close(l.GameRequestChan)
+					} else {
+						req.ConnChannel <- comms.ToMessage(LobbyStartGameResponse{
+							Status: false,
+							Reason: err.Error(),
+						})
+					}
 				} else {
-					l.State = state
-					req.ConnChannel <- comms.ToMessage(LobbyStartGameResponse{
-						Status: true,
-					})
-					l.broadcastMessage(LobbyStartGameBroadcast{Game: state.Name})
+					req.Error("Invalid game name", nil)
 				}
 			} else {
-				req.ConnChannel <- comms.ToMessage(comms.ErrorResponse{
-					Reason: "Only the host can start a game",
-				})
+				req.Error("Only the host can start a game", nil)
+			}
+
+		default:
+			// Route non-lobby-related messages
+			typeComponents := strings.Split(req.Message.Type, "/")
+
+			switch typeComponents[0] {
+			case "Game":
+				if len(typeComponents) != 2 {
+					req.Error(fmt.Sprintf(
+						"%s is an invalid Game message type, it should be of the format "+
+							"'Game/<game-message-type>'",
+						req.Message.Type,
+					), nil)
+				} else if l.GameState == nil {
+					req.Error("Must set LobbyStartGameRequest first", nil)
+				} else {
+					config.Games[l.GameName].HandleRequest(
+						l.GameRequestChan, l.GameState, req.PlayerID,
+						typeComponents[1], req.Message.Contents)
+				}
+
+			default:
+				req.Error(
+					fmt.Sprintf("%s is an invalid message type", req.Message.Type), nil)
 			}
 		}
 	}
 }
 
-func (l *Lobby) broadcastMessage(contents interface{}) {
+func (l *Lobby) broadcastMessageToLobby(contents interface{}) {
 	for _, conn := range l.PlayerIDToConnStore {
 		conn.WriteChannel <- comms.ToMessage(contents)
+	}
+}
+
+func (l *Lobby) broadcastMessageToPlayers(message comms.Message, players []string) {
+	for _, player := range players {
+		l.PlayerIDToConnStore[player].WriteChannel <- message
 	}
 }
 
@@ -104,6 +139,17 @@ func (l *Lobby) getPlayersList() []string {
 		i++
 	}
 	return players
+}
+
+// Reads in requests from games and sends them to players
+func (l *Lobby) GameRequestHandler() {
+	for {
+		req := <-l.GameRequestChan
+		l.broadcastMessageToPlayers(
+			comms.Message{"Game/" + req.Message.Type, req.Message.Contents},
+			req.Players,
+		)
+	}
 }
 
 // LobbyStoreMap stores Lobby IDs mapped to Lobby structs

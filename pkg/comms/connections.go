@@ -11,6 +11,13 @@ type Request struct {
 	Message     Message
 }
 
+func (r *Request) Error(message string, err error) {
+	r.ConnChannel <- ToMessage(ErrorResponse{
+		Reason: message,
+		Error:  err,
+	})
+}
+
 // ConnectionWrapper wraps a client connection, handling communication.
 type ConnectionWrapper struct {
 	Socket       *websocket.Conn

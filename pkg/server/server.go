@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/comms"
+	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/config"
 	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/lobby"
 	"github.com/mitchellh/mapstructure"
 
@@ -24,6 +25,8 @@ const (
 type Server struct {
 	Log *zap.Logger
 
+	Config *config.Config
+
 	// LobbyStore maps Lobby IDs to Lobby structs
 	Lobbys lobby.LobbyStore
 
@@ -33,9 +36,10 @@ type Server struct {
 }
 
 // NewServer constructs a new Server instance.
-func NewServer(log *zap.Logger, checkOriginFunc func(r *http.Request) bool) *Server {
+func NewServer(log *zap.Logger, checkOriginFunc func(r *http.Request) bool, config *config.Config) *Server {
 	return &Server{
 		Log:               log,
+		Config:            config,
 		Lobbys:            lobby.LobbyStore{},
 		ConnToPlayerStore: make(map[*comms.ConnectionWrapper]lobby.Player),
 		Upgrader:          websocket.Upgrader{CheckOrigin: checkOriginFunc},
@@ -98,7 +102,7 @@ func (s *Server) createLobby() func(http.ResponseWriter, *http.Request) {
 				RequestChannel:      make(chan comms.Request, CHANNEL_BUFFER_LEN),
 			}
 			s.Lobbys.Put(lobbyID, l)
-			go l.LobbyRequestHandler()
+			go l.LobbyRequestHandler(s.Config)
 
 			s.Log.Info(
 				"Created new Lobby",
