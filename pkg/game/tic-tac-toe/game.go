@@ -8,8 +8,7 @@ const NUM_PLAYERS = 2
 
 type State struct {
 	Players []string // {Nought, Cross}
-
-	Board [3][3]rune
+	Board   [3][3]rune
 }
 
 func NewState(players []string) (*State, error) {
