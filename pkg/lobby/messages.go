@@ -21,7 +21,7 @@ type LobbyStartGameRequest struct {
 	Game string `json:"game"`
 }
 
-type LobbyStartGameStatusResponse struct {
+type LobbyStartGameResponse struct {
 	Status bool   `json:"status"`
 	Reason string `json:"reason"`
 }
@@ -31,3 +31,5 @@ type LobbyStartGameBroadcast struct {
 }
 
 type LobbyClosedBroadcast struct{}
+
+type LobbyDoesNotExistResponse struct{}

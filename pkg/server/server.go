@@ -189,9 +189,7 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 							)
 							return false, nil
 						} else {
-							conn.WriteChannel <- comms.ToMessage(comms.ErrorResponse{
-								Reason: fmt.Sprintf("Lobby %s does not exist", req.LobbyID),
-							})
+							conn.WriteChannel <- comms.ToMessage(lobby.LobbyDoesNotExistResponse{})
 						}
 					} else {
 						conn.WriteChannel <- comms.ToMessage(comms.ErrorResponse{

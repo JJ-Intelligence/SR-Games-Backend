@@ -28,7 +28,7 @@ type Lobby struct {
 	Host string
 
 	// State is the state of the current game
-	State game.GameState
+	State *game.GameState
 
 	// PlayerIDToConnStore stores a mapping of Player IDs to Socket connections
 	PlayerIDToConnStore map[string]*comms.ConnectionWrapper
@@ -48,12 +48,7 @@ func (l *Lobby) LobbyRequestHandler() {
 		switch req.Message.Type {
 		case "PlayerJoinedEvent", "PlayerLeftEvent":
 			// New player joins the lobby
-			players := make([]string, len(l.PlayerIDToConnStore))
-			i := 0
-			for player := range l.PlayerIDToConnStore {
-				players[i] = player
-				i++
-			}
+			players := l.getPlayersList()
 			sort.Strings(players)
 
 			l.broadcastMessage(LobbyPlayerListBroadcast{
@@ -72,16 +67,16 @@ func (l *Lobby) LobbyRequestHandler() {
 			}
 
 			if req.PlayerID == l.Host {
-				state, err := game.NewGameState(contents.Game, len(l.PlayerIDToConnStore))
+
+				state, err := game.NewGameState(contents.Game, l.getPlayersList())
 				if err == nil {
-					req.ConnChannel <- comms.ToMessage(LobbyStartGameStatusResponse{
+					req.ConnChannel <- comms.ToMessage(LobbyStartGameResponse{
 						Status: false,
-						// TODO: Return error message from NewGameState
-						Reason: "Too many players",
+						Reason: err.Error(),
 					})
 				} else {
 					l.State = state
-					req.ConnChannel <- comms.ToMessage(LobbyStartGameStatusResponse{
+					req.ConnChannel <- comms.ToMessage(LobbyStartGameResponse{
 						Status: true,
 					})
 					l.broadcastMessage(LobbyStartGameBroadcast{Game: state.Name})
@@ -95,10 +90,20 @@ func (l *Lobby) LobbyRequestHandler() {
 	}
 }
 
-func (l Lobby) broadcastMessage(contents interface{}) {
+func (l *Lobby) broadcastMessage(contents interface{}) {
 	for _, conn := range l.PlayerIDToConnStore {
 		conn.WriteChannel <- comms.ToMessage(contents)
 	}
+}
+
+func (l *Lobby) getPlayersList() []string {
+	players := make([]string, len(l.PlayerIDToConnStore))
+	i := 0
+	for player := range l.PlayerIDToConnStore {
+		players[i] = player
+		i++
+	}
+	return players
 }
 
 // LobbyStoreMap stores Lobby IDs mapped to Lobby structs
