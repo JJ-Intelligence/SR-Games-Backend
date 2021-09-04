@@ -1,6 +1,7 @@
 package lobby
 
 import (
+	"sort"
 	"sync"
 
 	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/comms"
@@ -43,10 +44,11 @@ func (l *Lobby) LobbyRequestHandler() {
 		switch req.Message.Type {
 		case "PlayerJoinedEvent", "PlayerLeftEvent":
 			// New player joins the lobby
-			players := make([]string, len(l.PlayerIDToConnStore))
+			players := make([]string, len(l.PlayerIDToConnStore)-1)
 			for player := range l.PlayerIDToConnStore {
 				players = append(players, player)
 			}
+			sort.Strings(players)
 
 			l.broadcastMessage(LobbyPlayerListBroadcast{
 				PlayerIDs: players,
