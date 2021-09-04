@@ -29,3 +29,5 @@ type LobbyStartGameStatusResponse struct {
 type LobbyStartGameBroadcast struct {
 	Game string `json:"game"`
 }
+
+type LobbyClosedBroadcast struct{}

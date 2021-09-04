@@ -37,6 +37,10 @@ type Lobby struct {
 	RequestChannel chan comms.Request
 }
 
+func (l *Lobby) Close() {
+	l.broadcastMessage(LobbyClosedBroadcast{})
+}
+
 func (l *Lobby) LobbyRequestHandler() {
 	for {
 		req := <-l.RequestChannel
@@ -112,4 +116,8 @@ func (s *LobbyStore) Get(key string) (*Lobby, bool) {
 		return value.(*Lobby), true
 	}
 	return nil, false
+}
+
+func (s *LobbyStore) Delete(key string) {
+	s.store.Delete(key)
 }

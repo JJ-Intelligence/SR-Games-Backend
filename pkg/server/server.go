@@ -136,6 +136,13 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 				delete(s.ConnToPlayerStore, conn)
 				if lobby, ok := s.Lobbys.Get(player.LobbyID); ok {
 					delete(lobby.PlayerIDToConnStore, player.PlayerID)
+
+					// Close the lobby if this is the host
+					if lobby.Host == player.PlayerID {
+						s.Log.Info(fmt.Sprintf("Closing lobby %s", player.LobbyID))
+						lobby.Close()
+						s.Lobbys.Delete(player.LobbyID)
+					}
 				}
 			}
 		}()
@@ -265,11 +272,11 @@ func (s *Server) parseMessageLoop(
 func (s *Server) connectionWriteHandler(conn *comms.ConnectionWrapper) {
 	for {
 		message := <-conn.WriteChannel
-		switch message.Type {
-		case "CloseConnectionRequest":
+		conn.WriteMessage(message)
+
+		if _, ok := message.Contents.(lobby.LobbyClosedBroadcast); ok {
+			conn.Socket.Close()
 			return
-		default:
-			conn.WriteMessage(message)
 		}
 	}
 }
