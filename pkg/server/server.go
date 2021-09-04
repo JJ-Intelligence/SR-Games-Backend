@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/comms"
 	"github.com/JJ-Intelligence/SR-Games-Backend/pkg/lobby"
@@ -14,7 +15,10 @@ import (
 	"go.uber.org/zap"
 )
 
-const CHANNEL_BUFFER_LEN = 10
+const (
+	CHANNEL_BUFFER_LEN = 10
+	PING_TIMEOUT       = 50 * time.Second
+)
 
 // Server stores all connection dependencies for the websocket server.
 type Server struct {
@@ -199,6 +203,10 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 			return
 		}
 
+		// Keep websocket conection alive by sending a ping every 50 seconds
+		// (Heroku closes connections after 55s)
+		pingAfterTimeout(conn.WriteChannel)
+
 		// Read in messages and push them onto the Lobby RequestChannel
 		s.parseMessageLoop(conn, func(message comms.Message) (bool, error) {
 			switch message.Type {
@@ -220,6 +228,13 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 			}
 		})
 	}
+}
+
+func pingAfterTimeout(clientWriteChan chan comms.Message) {
+	time.AfterFunc(PING_TIMEOUT, func() {
+		clientWriteChan <- comms.ToMessage(comms.Ping{})
+		pingAfterTimeout(clientWriteChan)
+	})
 }
 
 func (s *Server) parseMessageLoop(

@@ -23,3 +23,6 @@ type ErrorResponse struct {
 	Reason string `json:"reason"`
 	Error  error  `json:"error"`
 }
+
+// Empty ping sent to the client to keep the websocket alive
+type Ping struct{}
