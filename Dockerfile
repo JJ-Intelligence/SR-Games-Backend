@@ -20,7 +20,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o backend.exe cmd/main.go
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -buildmode=plugin \
     -o tictactoe.so \
-    plugins/games/tictactoe/game.go
+    plugins/games/tictactoe/main.go
 
 # Create production image
 FROM scratch
