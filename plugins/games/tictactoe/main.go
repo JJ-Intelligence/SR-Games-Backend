@@ -51,10 +51,10 @@ func HandleRequest(
 	player,
 	messageType string,
 	messageContents interface{},
-) (interface{}, interface{}) {
+) interface{} {
 	// Decode state
-	var state State
-	mapstructure.Decode(stateInterface, state)
+	state := stateInterface.(*State)
+	mapstructure.Decode(stateInterface, &state)
 
 	// Handle the request
 	switch messageType {
@@ -80,7 +80,7 @@ func HandleRequest(
 		currentPlayer := state.Players[state.currentPlayer]
 		if player == currentPlayer {
 			var contents MakeMoveRequest
-			err := mapstructure.Decode(messageContents, contents)
+			err := mapstructure.Decode(messageContents, &contents)
 
 			if err == nil {
 				if state.isValidMove(contents.X, contents.Y) {
@@ -107,15 +107,15 @@ func HandleRequest(
 						}
 					}
 				} else {
-					return nil, MakeMoveResponse{false}
+					return MakeMoveResponse{false}
 				}
 			} else {
-				return nil, comms.ErrorDecodingMessageResponse{}
+				return comms.ErrorDecodingMessageResponse{}
 			}
 		} else {
-			return nil, NotPlayersTurnResponse{}
+			return NotPlayersTurnResponse{}
 		}
 	}
 
-	return state, nil
+	return nil
 }

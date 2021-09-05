@@ -14,7 +14,7 @@ type GameRequest struct {
 
 type GameService struct {
 	NewState      func([]string) (interface{}, error)
-	HandleRequest func(chan GameRequest, interface{}, string, string, interface{}) (interface{}, interface{})
+	HandleRequest func(chan GameRequest, interface{}, string, string, interface{}) interface{}
 }
 
 func NewGame(name string, p *plugin.Plugin) GameService {
@@ -29,6 +29,6 @@ func NewGame(name string, p *plugin.Plugin) GameService {
 
 	return GameService{
 		NewState:      newState.(func([]string) (interface{}, error)),
-		HandleRequest: handleRequest.(func(chan GameRequest, interface{}, string, string, interface{}) (interface{}, interface{})),
+		HandleRequest: handleRequest.(func(chan GameRequest, interface{}, string, string, interface{}) interface{}),
 	}
 }

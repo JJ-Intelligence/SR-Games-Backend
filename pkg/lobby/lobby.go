@@ -96,12 +96,10 @@ func (l *Lobby) LobbyRequestHandler(config *config.Config) {
 							"Started new game of %s in lobby %s", l.GameName, l.LobbyID))
 
 						// Forward request to GameService
-						newState, errMessage := config.Games[l.GameName].HandleRequest(
+						errMessage := config.Games[l.GameName].HandleRequest(
 							l.GameRequestChan, l.GameState, req.PlayerID,
 							"StartGameRequest", req.Message.Contents)
-						if errMessage == nil {
-							l.GameState = newState
-						} else {
+						if errMessage != nil {
 							req.ConnChannel <- comms.ToMessage(errMessage)
 						}
 					} else {
@@ -136,12 +134,10 @@ func (l *Lobby) LobbyRequestHandler(config *config.Config) {
 				} else if l.GameState == nil {
 					req.Error("Must set LobbyStartGameRequest first", nil)
 				} else {
-					newState, errMessage := config.Games[l.GameName].HandleRequest(
+					errMessage := config.Games[l.GameName].HandleRequest(
 						l.GameRequestChan, l.GameState, req.PlayerID,
 						typeComponents[1], req.Message.Contents)
-					if errMessage == nil {
-						l.GameState = newState
-					} else {
+					if errMessage != nil {
 						req.ConnChannel <- comms.ToMessage(errMessage)
 					}
 				}
