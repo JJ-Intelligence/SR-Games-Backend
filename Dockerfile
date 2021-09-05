@@ -1,6 +1,6 @@
 # Pull Go image
 FROM golang:1.16-buster as builder
-ENV GO111MODULE=on
+ENV GO111MODULE on
 
 # Set working directory
 WORKDIR /sr-games-backend
@@ -13,11 +13,15 @@ RUN go mod download
 # Copy backend to container image
 COPY . .
 
+# Must use cgo/linux for plugins
+ENV CGO_ENABLED 1
+ENV GOOS linux
+
 # Build binary (backend.exe) inside container
-RUN CGO_ENABLED=0 go build -o backend.exe cmd/main.go
+RUN go build -o backend.exe cmd/main.go
 
 # Build TicTacToe plugin inside container
-RUN CGO_ENABLED=1 GOOS=linux go build -buildmode=plugin -o tictactoe.so plugins/games/tictactoe/main.go
+RUN GOOS=linux go build -buildmode=plugin -o tictactoe.so plugins/games/tictactoe/main.go
 
 
 # Create production image
