@@ -222,7 +222,6 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 
 		// Read in messages and push them onto the Lobby RequestChannel
 		err = s.parseMessageLoop(conn, func(message comms.Message) (bool, error) {
-			s.Log.Info("Received message", zap.Any("message", message))
 			switch message.Type {
 			case "LobbyLeaveRequest":
 				l.RequestChannel <- comms.Request{

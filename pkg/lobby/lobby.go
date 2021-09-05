@@ -78,11 +78,22 @@ func (l *Lobby) LobbyRequestHandler(config *config.Config) {
 				if gamePlugin, ok := config.Games[contents.Game]; ok {
 					state, err := gamePlugin.NewState(l.getPlayersList())
 					if err == nil {
-						// Set the game
+						// Save game state to Lobby
 						l.GameName = contents.Game
 						l.GameState = state
 						l.GameRequestChan = make(chan game.GameRequest)
+
+						// Run a handler to handle requests from the GameService
 						go l.GameRequestHandler()
+
+						// Tell players that the game has started
+						req.ConnChannel <- comms.ToMessage(LobbyStartGameResponse{
+							Status: true,
+						})
+						l.broadcastMessageToLobby(
+							LobbyStartGameBroadcast{Game: l.GameName})
+						l.Log.Info(fmt.Sprintf(
+							"Started new game of %s in lobby %s", l.GameName, l.LobbyID))
 					} else {
 						req.ConnChannel <- comms.ToMessage(LobbyStartGameResponse{
 							Status: false,
