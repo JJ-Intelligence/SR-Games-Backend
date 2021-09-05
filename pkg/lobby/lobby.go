@@ -175,6 +175,9 @@ func (s *LobbyStore) Put(key string, value *Lobby) {
 
 func (s *LobbyStore) Get(key string) (*Lobby, bool) {
 	if value, ok := s.store.Load(key); ok {
+		fmt.Println("sdsdsd")
+		fmt.Println(value)
+		fmt.Println(value.(*Lobby))
 		return value.(*Lobby), true
 	}
 	return nil, false
