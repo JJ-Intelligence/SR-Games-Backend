@@ -21,20 +21,19 @@ ENV GOOS linux
 RUN go build -o backend.exe cmd/main.go
 
 # Build TicTacToe plugin inside container
-RUN GOOS=linux go build -buildmode=plugin -o tictactoe.so plugins/games/tictactoe/main.go
+RUN go build -buildmode=plugin -o tictactoe.so plugins/games/tictactoe/main.go
 
 
 # Create production image
 FROM alpine
-COPY --from=builder /sr-games-backend/backend.exe /
-COPY --from=builder /sr-games-backend/config.yaml /
-COPY --from=builder /sr-games-backend/tictactoe.so /plugins/games/tictactoe.so
+COPY --from=builder /sr-games-backend/backend.exe .
+COPY --from=builder /sr-games-backend/config.yaml .
+COPY --from=builder /sr-games-backend/tictactoe.so /plugins/games/
 
 ENV FRONTEND_HOST "https://sr-games.herokuapp.com"
 ENV CONFIG_PATH "./config.yaml"
 
 RUN ls
-RUN ls plugins/games
 
 ENV PORT 80
 EXPOSE 80

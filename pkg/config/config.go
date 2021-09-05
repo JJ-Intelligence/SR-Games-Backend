@@ -14,7 +14,7 @@ type RawYamlConfig struct {
 }
 
 type Config struct {
-	Games map[string]game.Game
+	Games map[string]game.GameService
 }
 
 func ParseConfig(path string) *Config {
@@ -29,7 +29,7 @@ func ParseConfig(path string) *Config {
 		panic("Unable to parse yaml config")
 	}
 
-	games := make(map[string]game.Game)
+	games := make(map[string]game.GameService)
 	for name, pluginPath := range rawConfig.Games {
 		p, err := plugin.Open(pluginPath)
 		if err != nil {

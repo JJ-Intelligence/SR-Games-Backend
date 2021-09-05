@@ -12,17 +12,17 @@ type GameRequest struct {
 	Message comms.Message
 }
 
-type newStateFunc func(players []string) (interface{}, error)
+type newStateFunc func(players []string) (state interface{}, err error)
 type handleRequestFunc func(
 	gameChan chan GameRequest, state interface{},
 	player, messageType string, contents interface{})
 
-type Game struct {
+type GameService struct {
 	NewState      newStateFunc
 	HandleRequest handleRequestFunc
 }
 
-func NewGame(name string, p *plugin.Plugin) Game {
+func NewGame(name string, p *plugin.Plugin) GameService {
 	newState, err := p.Lookup("NewState")
 	if err != nil {
 		panic(fmt.Sprintf("NewState function does not exist for plugin %s", name))
@@ -32,8 +32,10 @@ func NewGame(name string, p *plugin.Plugin) Game {
 		panic(fmt.Sprintf("HandleRequest function does not exist for plugin %s", name))
 	}
 
-	return Game{
-		NewState:      newState.(newStateFunc),
-		HandleRequest: handleRequest.(handleRequestFunc),
+	return GameService{
+		NewState: newState.(func(players []string) (state interface{}, err error)),
+		HandleRequest: handleRequest.(func(
+			gameChan chan GameRequest, state interface{},
+			player, messageType string, contents interface{})),
 	}
 }
