@@ -17,7 +17,7 @@ COPY . .
 RUN CGO_ENABLED=0 go build -o backend.exe cmd/main.go
 
 # Build TicTacToe plugin inside container
-RUN go build -buildmode=plugin -o tictactoe.so plugins/games/tictactoe/main.go
+RUN CGO_ENABLED=1 GOOS=linux go build -buildmode=plugin -o tictactoe.so plugins/games/tictactoe/main.go
 
 
 # Create production image

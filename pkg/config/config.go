@@ -33,7 +33,8 @@ func ParseConfig(path string) *Config {
 	for name, pluginPath := range rawConfig.Games {
 		p, err := plugin.Open(pluginPath)
 		if err != nil {
-			panic(fmt.Sprintf("Unable to load game plugin: %e", err))
+			panic(fmt.Sprintf(
+				"Unable to load game plugin from '%s': %s", pluginPath, err.Error()))
 		}
 		games[name] = game.NewGame(name, p)
 	}
