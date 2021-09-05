@@ -97,6 +97,7 @@ func (s *Server) createLobby() func(http.ResponseWriter, *http.Request) {
 			playerID := playerIDParam[0]
 			l := &lobby.Lobby{
 				Log:                 s.Log,
+				LobbyID:             lobbyID,
 				Host:                playerID,
 				PlayerIDToConnStore: make(map[string]*comms.ConnectionWrapper),
 				RequestChannel:      make(chan comms.Request, CHANNEL_BUFFER_LEN),
@@ -141,7 +142,7 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 				if lobby, ok := s.Lobbys.Get(player.LobbyID); ok {
 					delete(lobby.PlayerIDToConnStore, player.PlayerID)
 					s.Log.Info(fmt.Sprintf(
-						"Player %s has left lobby %s", player.PlayerID, player.LobbyID))
+						"Player %s left lobby %s", player.PlayerID, player.LobbyID))
 
 					// Close the lobby if this is the host
 					if lobby.Host == player.PlayerID {

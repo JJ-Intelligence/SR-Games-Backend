@@ -26,7 +26,8 @@ func IsValidPlayerID(playerID string) bool {
 }
 
 type Lobby struct {
-	Log *zap.Logger
+	Log     *zap.Logger
+	LobbyID string
 	// Host is the host's player ID
 	Host string
 
@@ -44,11 +45,17 @@ type Lobby struct {
 
 func (l *Lobby) Close() {
 	l.broadcastMessageToLobby(LobbyClosedBroadcast{})
+	close(l.RequestChannel)
+	if l.GameRequestChan != nil {
+		close(l.GameRequestChan)
+	}
 }
 
 func (l *Lobby) LobbyRequestHandler(config *config.Config) {
+	l.Log.With(zap.String("lobbyID", l.LobbyID))
 	for {
 		req := <-l.RequestChannel
+		l.Log.Info("Parsing request", zap.Any("message", req.Message))
 
 		switch req.Message.Type {
 		case "PlayerJoinedEvent", "PlayerLeftEvent":
@@ -78,7 +85,6 @@ func (l *Lobby) LobbyRequestHandler(config *config.Config) {
 						l.GameState = state
 						l.GameRequestChan = make(chan game.GameRequest)
 						go l.GameRequestHandler()
-						defer close(l.GameRequestChan)
 					} else {
 						req.ConnChannel <- comms.ToMessage(LobbyStartGameResponse{
 							Status: false,
