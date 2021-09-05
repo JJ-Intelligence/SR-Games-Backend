@@ -177,7 +177,8 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 				if err == nil {
 					if lobby.IsValidPlayerID(req.PlayerID) {
 						// Check if the lobby exists
-						l, ok := s.Lobbys.Get(req.LobbyID)
+						lob, ok := s.Lobbys.Get(req.LobbyID)
+						l = lob
 						if ok {
 							// Add the player to the lobby if it exists
 							conn.PlayerID = req.PlayerID
@@ -194,6 +195,7 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 									req.PlayerID, req.LobbyID,
 								),
 							)
+							s.Log.Info("lobby in fun", zap.Any("lobby", l))
 							return false, nil
 						} else {
 							conn.WriteChannel <- comms.ToMessage(lobby.LobbyDoesNotExistResponse{})
