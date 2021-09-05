@@ -25,7 +25,7 @@ ENV GOOS linux
 RUN go build -o backend.exe cmd/main.go
 
 # Build TicTacToe plugin inside container
-RUN go build -buildmode=plugin -o tictactoe.so plugins/games/tictactoe/
+RUN go build -buildmode=plugin -o tictactoe.so plugins/games/tictactoe/*
 
 
 # Create production image
