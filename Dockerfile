@@ -1,5 +1,5 @@
 # Pull Go image
-FROM golang:1.17-buster as builder
+FROM golang:1.16-buster as builder
 ENV GO111MODULE=on
 
 # Set working directory
@@ -27,7 +27,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 RUN echo $(ls)
 
 # Create production image
-FROM scratch
+FROM alpine
 COPY --from=builder /sr-games-backend/backend.exe /
 COPY --from=builder /sr-games-backend/config.yaml /
 COPY --from=builder /sr-games-backend/tictactoe.so /plugins/games/
