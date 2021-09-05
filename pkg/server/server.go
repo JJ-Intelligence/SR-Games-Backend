@@ -159,8 +159,7 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 
 		// Wait for a successful LobbyJoinRequest
 		var (
-			l        *lobby.Lobby
-			playerID string
+			l *lobby.Lobby
 		)
 		err = s.parseMessageLoop(conn, func(message comms.Message) (bool, error) {
 			// Wait for a LobbyJoinRequest
@@ -228,14 +227,14 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 			case "LobbyLeaveRequest":
 				l.RequestChannel <- comms.Request{
 					ConnChannel: conn.WriteChannel,
-					PlayerID:    playerID,
+					PlayerID:    conn.PlayerID,
 					Message:     comms.ToMessage(lobby.PlayerLeftEvent{}),
 				}
 				return false, nil
 			default:
 				l.RequestChannel <- comms.Request{
 					ConnChannel: conn.WriteChannel,
-					PlayerID:    playerID,
+					PlayerID:    conn.PlayerID,
 					Message:     message,
 				}
 				return true, nil
