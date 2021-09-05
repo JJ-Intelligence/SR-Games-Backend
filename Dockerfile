@@ -33,4 +33,5 @@ ENV CONFIG_PATH /config.yaml
 
 ENV PORT 80
 EXPOSE 80
-CMD ["./backend.exe"]
+CMD [ "ls" ]
+ENTRYPOINT ["./backend.exe"]
