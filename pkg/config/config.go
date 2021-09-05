@@ -18,7 +18,7 @@ type Config struct {
 }
 
 func ParseConfig(path string) *Config {
-	configFile, err := ioutil.ReadFile("conf.yaml")
+	configFile, err := ioutil.ReadFile(path)
 	if err != nil {
 		panic("Unable to read config")
 	}
