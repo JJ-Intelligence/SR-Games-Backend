@@ -94,6 +94,11 @@ func (l *Lobby) LobbyRequestHandler(config *config.Config) {
 							LobbyStartGameBroadcast{Game: l.GameName})
 						l.Log.Info(fmt.Sprintf(
 							"Started new game of %s in lobby %s", l.GameName, l.LobbyID))
+
+						// Forward request to GameService
+						config.Games[l.GameName].HandleRequest(
+							l.GameRequestChan, l.GameState, req.PlayerID,
+							"StartGameRequest", req.Message.Contents)
 					} else {
 						req.ConnChannel <- comms.ToMessage(LobbyStartGameResponse{
 							Status: false,
