@@ -16,10 +16,10 @@ RUN go mod download
 COPY . .
 
 # Build binary (backend.exe) inside container
-RUN CGO_ENABLED=0 GOOS=linux go build -o backend.exe cmd/main.go
+RUN GOOS=linux go build -o backend.exe cmd/main.go
 
 # Build TicTacToe plugin inside container
-RUN CGO_ENABLED=0 GOOS=linux go build \
+RUN GOOS=linux go build \
     -buildmode=plugin \
     -o tictactoe.so \
     plugins/games/tictactoe/main.go
