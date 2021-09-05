@@ -232,14 +232,17 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 				}
 				return false, nil
 			default:
+				s.Log.Info("forwarding message to lobby", zap.Any("message", message))
 				l.RequestChannel <- comms.Request{
 					ConnChannel: conn.WriteChannel,
 					PlayerID:    playerID,
 					Message:     message,
 				}
+				s.Log.Info("message sent to lobby", zap.Any("message", message))
 				return true, nil
 			}
 		})
+		s.Log.Info("outside of the loop", zap.Any("message", message))
 		if err != nil {
 			s.Log.Info("Client errored in main loop", zap.Error(err))
 		}
@@ -261,6 +264,7 @@ func (s *Server) parseMessageLoop(
 ) error {
 	for {
 		message, err := conn.ReadMessage()
+		s.Log.Info("Reading message")
 
 		if err != nil {
 			if _, ok := err.(*json.UnmarshalTypeError); ok {
@@ -269,11 +273,13 @@ func (s *Server) parseMessageLoop(
 					Error:  err,
 				})
 			} else {
-				s.Log.Info("Client errored or disconnected", zap.Error(err))
+				// Client has disconnected or errored
+				parseMessageCB(comms.ToMessage(lobby.LobbyLeaveRequest{}))
 				return err
 			}
 		} else {
 			if ok, err := parseMessageCB(message); !ok {
+				s.Log.Info("Exited parseMessageCB")
 				return err
 			}
 		}
