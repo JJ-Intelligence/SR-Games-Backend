@@ -24,7 +24,7 @@ func ParseConfig(path string) *Config {
 	}
 
 	var rawConfig RawYamlConfig
-	err = yaml.Unmarshal(configFile, rawConfig)
+	err = yaml.Unmarshal(configFile, &rawConfig)
 	if err != nil {
 		panic("Unable to parse yaml config")
 	}
