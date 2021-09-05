@@ -53,6 +53,7 @@ func (l *Lobby) Close() {
 
 func (l *Lobby) LobbyRequestHandler(config *config.Config) {
 	l.Log.With(zap.String("lobbyID", l.LobbyID))
+
 	for {
 		req := <-l.RequestChannel
 		l.Log.Info("Parsing request", zap.Any("message", req.Message))

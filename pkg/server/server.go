@@ -132,6 +132,7 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 			Socket:       ws,
 			WriteChannel: make(chan comms.Message, CHANNEL_BUFFER_LEN),
 		}
+		s.Log.With(zap.Any("connectionID", uuid.NewString()))
 
 		// Remove the player when their socket disconnects
 		defer func() {
@@ -212,6 +213,7 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 			return true, nil
 		})
 		if err != nil {
+			s.Log.Info("Client errored before main loop", zap.Error(err))
 			return
 		}
 
@@ -220,7 +222,7 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 		pingAfterTimeout(conn)
 
 		// Read in messages and push them onto the Lobby RequestChannel
-		s.parseMessageLoop(conn, func(message comms.Message) (bool, error) {
+		err = s.parseMessageLoop(conn, func(message comms.Message) (bool, error) {
 			switch message.Type {
 			case "LobbyLeaveRequest":
 				delete(l.PlayerIDToConnStore, playerID)
@@ -239,6 +241,9 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 				return true, nil
 			}
 		})
+		if err != nil {
+			s.Log.Info("Client errored in main loop", zap.Error(err))
+		}
 	}
 }
 
