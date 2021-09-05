@@ -12,14 +12,9 @@ type GameRequest struct {
 	Message comms.Message
 }
 
-type newStateFunc func(players []string) (state interface{}, err error)
-type handleRequestFunc func(
-	gameChan chan GameRequest, state interface{},
-	player, messageType string, contents interface{})
-
 type GameService struct {
-	NewState      newStateFunc
-	HandleRequest handleRequestFunc
+	NewState      func([]string) (interface{}, error)
+	HandleRequest func(chan GameRequest, interface{}, string, string, interface{})
 }
 
 func NewGame(name string, p *plugin.Plugin) GameService {
@@ -33,9 +28,7 @@ func NewGame(name string, p *plugin.Plugin) GameService {
 	}
 
 	return GameService{
-		NewState: newState.(func(players []string) (state interface{}, err error)),
-		HandleRequest: handleRequest.(func(
-			gameChan chan GameRequest, state interface{},
-			player, messageType string, contents interface{})),
+		NewState:      newState.(func([]string) (interface{}, error)),
+		HandleRequest: handleRequest.(func(chan GameRequest, interface{}, string, string, interface{})),
 	}
 }
