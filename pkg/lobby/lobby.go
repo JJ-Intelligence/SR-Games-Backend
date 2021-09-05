@@ -52,11 +52,8 @@ func (l *Lobby) Close() {
 }
 
 func (l *Lobby) LobbyRequestHandler(config *config.Config) {
-	l.Log.With(zap.String("lobbyID", l.LobbyID))
-
 	for {
 		req := <-l.RequestChannel
-		l.Log.Info("Parsing request", zap.Any("message", req.Message))
 
 		switch req.Message.Type {
 		case "PlayerJoinedEvent", "PlayerLeftEvent":
@@ -96,7 +93,11 @@ func (l *Lobby) LobbyRequestHandler(config *config.Config) {
 					req.Error("Invalid game name", nil)
 				}
 			} else {
-				req.Error("Only the host can start a game", nil)
+				req.Error(fmt.Sprintf(
+					"Only the host can start a game (player %s, host %s)",
+					req.PlayerID,
+					l.Host,
+				), nil)
 			}
 
 		default:
@@ -175,9 +176,6 @@ func (s *LobbyStore) Put(key string, value *Lobby) {
 
 func (s *LobbyStore) Get(key string) (*Lobby, bool) {
 	if value, ok := s.store.Load(key); ok {
-		fmt.Println("sdsdsd")
-		fmt.Println(value)
-		fmt.Println(value.(*Lobby))
 		return value.(*Lobby), true
 	}
 	return nil, false

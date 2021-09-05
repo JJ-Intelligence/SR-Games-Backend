@@ -178,7 +178,6 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 					if lobby.IsValidPlayerID(req.PlayerID) {
 						// Check if the lobby exists
 						lob, ok := s.Lobbys.Get(req.LobbyID)
-						s.Log.Info("lobby before fun", zap.Any("lobby", lob))
 						l = lob
 						if ok {
 							// Add the player to the lobby if it exists
@@ -196,7 +195,6 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 									req.PlayerID, req.LobbyID,
 								),
 							)
-							s.Log.Info("lobby in fun", zap.Any("lobby", l))
 							return false, nil
 						} else {
 							conn.WriteChannel <- comms.ToMessage(lobby.LobbyDoesNotExistResponse{})
@@ -223,8 +221,6 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 		// (Heroku closes connections after 55s)
 		pingAfterTimeout(conn)
 
-		s.Log.Info("lobby", zap.Any("lobby", l))
-
 		// Read in messages and push them onto the Lobby RequestChannel
 		err = s.parseMessageLoop(conn, func(message comms.Message) (bool, error) {
 			s.Log.Info("Received message", zap.Any("message", message))
@@ -237,17 +233,14 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 				}
 				return false, nil
 			default:
-				s.Log.Info("forwarding message to lobby", zap.Any("message", message), zap.Any("lobby", l), zap.Any("lobbyChan", l.RequestChannel))
 				l.RequestChannel <- comms.Request{
 					ConnChannel: conn.WriteChannel,
 					PlayerID:    playerID,
 					Message:     message,
 				}
-				s.Log.Info("message sent to lobby", zap.Any("message", message))
 				return true, nil
 			}
 		})
-		s.Log.Info("outside of the loop")
 		if err != nil {
 			s.Log.Info("Client errored in main loop", zap.Error(err))
 		}
@@ -284,7 +277,6 @@ func (s *Server) parseMessageLoop(
 			}
 		} else {
 			if ok, err := parseMessageCB(message); !ok {
-				s.Log.Info("Exited parseMessageCB")
 				return err
 			}
 		}
