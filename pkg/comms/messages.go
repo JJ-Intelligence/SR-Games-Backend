@@ -24,5 +24,7 @@ type ErrorResponse struct {
 	Error  error  `json:"error"`
 }
 
+type ErrorDecodingMessageResponse struct{}
+
 // Empty ping sent to the client to keep the websocket alive
 type Ping struct{}
