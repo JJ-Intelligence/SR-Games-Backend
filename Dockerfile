@@ -1,5 +1,7 @@
 # Pull Go image
 FROM golang:1.16-buster as builder
+
+RUN apk update && apk add --no-cache musl-dev gcc build-base
 ENV GO111MODULE=on
 
 # Set working directory
