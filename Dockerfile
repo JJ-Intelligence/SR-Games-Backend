@@ -2,7 +2,7 @@
 FROM alpine as builder
 RUN apk update
 RUN apk upgrade
-RUN apk add --update go=1.8.3-r0 gcc=6.3.0-r4 g++=6.3.0-r4
+RUN apk add --update go=1.16.7-r0 gcc=10.3.1_git20210424-r2 g++=10.3.1_git20210424-r2
 
 ENV GO111MODULE on
 
