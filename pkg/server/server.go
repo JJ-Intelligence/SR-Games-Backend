@@ -132,7 +132,6 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 			Socket:       ws,
 			WriteChannel: make(chan comms.Message, CHANNEL_BUFFER_LEN),
 		}
-		s.Log.With(zap.Any("connectionID", uuid.NewString()))
 
 		// Remove the player when their socket disconnects
 		defer func() {
@@ -223,9 +222,9 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 
 		// Read in messages and push them onto the Lobby RequestChannel
 		err = s.parseMessageLoop(conn, func(message comms.Message) (bool, error) {
+			s.Log.Info("Received message", zap.Any("message", message))
 			switch message.Type {
 			case "LobbyLeaveRequest":
-				delete(l.PlayerIDToConnStore, playerID)
 				l.RequestChannel <- comms.Request{
 					ConnChannel: conn.WriteChannel,
 					PlayerID:    playerID,
