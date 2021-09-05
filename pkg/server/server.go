@@ -139,15 +139,15 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 
 			if player, ok := s.ConnToPlayerStore[conn]; ok {
 				delete(s.ConnToPlayerStore, conn)
-				if lobby, ok := s.Lobbys.Get(player.LobbyID); ok {
-					delete(lobby.PlayerIDToConnStore, player.PlayerID)
+				if l, ok := s.Lobbys.Get(player.LobbyID); ok {
+					delete(l.PlayerIDToConnStore, player.PlayerID)
 					s.Log.Info(fmt.Sprintf(
 						"Player %s left lobby %s", player.PlayerID, player.LobbyID))
 
 					// Close the lobby if this is the host
-					if lobby.Host == player.PlayerID {
+					if l.Host == player.PlayerID {
 						s.Log.Info(fmt.Sprintf("Closing lobby %s", player.LobbyID))
-						lobby.Close()
+						l.Close()
 						s.Lobbys.Delete(player.LobbyID)
 					}
 				}
@@ -220,6 +220,8 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 		// (Heroku closes connections after 55s)
 		pingAfterTimeout(conn)
 
+		s.Log.Info("lobby", zap.Any("lobby", l))
+
 		// Read in messages and push them onto the Lobby RequestChannel
 		err = s.parseMessageLoop(conn, func(message comms.Message) (bool, error) {
 			s.Log.Info("Received message", zap.Any("message", message))
@@ -232,7 +234,7 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 				}
 				return false, nil
 			default:
-				s.Log.Info("forwarding message to lobby", zap.Any("message", message))
+				s.Log.Info("forwarding message to lobby", zap.Any("message", message), zap.Any("lobby", l), zap.Any("lobbyChan", l.RequestChannel))
 				l.RequestChannel <- comms.Request{
 					ConnChannel: conn.WriteChannel,
 					PlayerID:    playerID,
