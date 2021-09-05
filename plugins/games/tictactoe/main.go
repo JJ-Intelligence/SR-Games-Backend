@@ -54,7 +54,6 @@ func HandleRequest(
 ) interface{} {
 	// Decode state
 	state := stateInterface.(*State)
-	mapstructure.Decode(stateInterface, &state)
 
 	// Handle the request
 	switch messageType {
@@ -92,7 +91,7 @@ func HandleRequest(
 						Message: comms.ToMessage(MakeMoveResponse{true}),
 					}
 					gameChan <- game.GameRequest{
-						Players: []string{player},
+						Players: state.Players,
 						Message: comms.ToMessage(MakeMoveBroadcast{
 							X:        contents.X,
 							Y:        contents.Y,
@@ -101,9 +100,17 @@ func HandleRequest(
 					}
 
 					if state.isWinner(contents.X, contents.Y) {
+						// The current player has won the game
 						gameChan <- game.GameRequest{
-							Players: []string{player},
+							Players: state.Players,
 							Message: comms.ToMessage(WinnerBroadcast{player}),
+						}
+					} else {
+						// Next player is making a move
+						gameChan <- game.GameRequest{
+							Players: state.Players,
+							Message: comms.ToMessage(
+								PlayerTurnBroadcast{state.Players[state.currentPlayer]}),
 						}
 					}
 				} else {
