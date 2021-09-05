@@ -1,5 +1,9 @@
-# Pull Go image
-FROM golang:1.16-buster as builder
+# Pull Ubuntu image and install Go & GCC (required to use CGO which we need for plugins)
+FROM alpine as builder
+RUN apk update
+RUN apk upgrade
+RUN apk add --update go=1.8.3-r0 gcc=6.3.0-r4 g++=6.3.0-r4
+
 ENV GO111MODULE on
 
 # Set working directory
