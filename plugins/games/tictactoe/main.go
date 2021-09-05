@@ -120,7 +120,7 @@ func HandleRequest(
 				return comms.ErrorDecodingMessageResponse{}
 			}
 		} else {
-			return NotPlayersTurnResponse{}
+			return comms.ErrorResponse{Reason: "Not your turn"}
 		}
 	}
 

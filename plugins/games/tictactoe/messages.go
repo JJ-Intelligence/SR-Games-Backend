@@ -18,8 +18,6 @@ type MakeMoveResponse struct {
 	Status bool `json:"status"`
 }
 
-type NotPlayersTurnResponse struct{}
-
 type MakeMoveBroadcast struct {
 	X        int    `json:"x"`
 	Y        int    `json:"y"`
