@@ -30,8 +30,7 @@ ENV FRONTEND_HOST "https://sr-games.herokuapp.com"
 ENV CONFIG_PATH "./config.yaml"
 
 RUN ls
-RUN cd plugins/games
-RUN ls
+RUN ls plugins/games
 
 ENV PORT 80
 EXPOSE 80
