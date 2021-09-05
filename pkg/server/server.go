@@ -242,7 +242,7 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 				return true, nil
 			}
 		})
-		s.Log.Info("outside of the loop", zap.Any("message", message))
+		s.Log.Info("outside of the loop")
 		if err != nil {
 			s.Log.Info("Client errored in main loop", zap.Error(err))
 		}
