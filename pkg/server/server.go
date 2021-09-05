@@ -140,6 +140,8 @@ func (s *Server) connectionReadHandler() func(w http.ResponseWriter, r *http.Req
 				delete(s.ConnToPlayerStore, conn)
 				if lobby, ok := s.Lobbys.Get(player.LobbyID); ok {
 					delete(lobby.PlayerIDToConnStore, player.PlayerID)
+					s.Log.Info(fmt.Sprintf(
+						"Player %s has left lobby %s", player.PlayerID, player.LobbyID))
 
 					// Close the lobby if this is the host
 					if lobby.Host == player.PlayerID {

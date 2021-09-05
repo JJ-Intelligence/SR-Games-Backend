@@ -37,8 +37,6 @@ COPY --from=builder /sr-games-backend/tictactoe.so /plugins/games/
 ENV FRONTEND_HOST "https://sr-games.herokuapp.com"
 ENV CONFIG_PATH "./config.yaml"
 
-RUN ls
-
 ENV PORT 80
 EXPOSE 80
 ENTRYPOINT ["./backend.exe"]
