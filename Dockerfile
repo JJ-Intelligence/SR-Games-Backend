@@ -13,8 +13,6 @@ RUN go mod download
 # Copy backend to container image
 COPY . .
 
-RUN echo $(ls)
-
 # Build binary (backend.exe) inside container
 RUN CGO_ENABLED=0 GOOS=linux go build -o backend.exe cmd/main.go
 
@@ -24,7 +22,6 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o tictactoe.so \
     plugins/games/tictactoe/main.go
 
-RUN echo $(ls)
 
 # Create production image
 FROM alpine
@@ -32,10 +29,9 @@ COPY --from=builder /sr-games-backend/backend.exe /
 COPY --from=builder /sr-games-backend/config.yaml /
 COPY --from=builder /sr-games-backend/tictactoe.so /plugins/games/
 
-ENV FRONTEND_HOST https://sr-games.herokuapp.com
-ENV CONFIG_PATH /config.yaml
+ENV FRONTEND_HOST "https://sr-games.herokuapp.com"
+ENV CONFIG_PATH "./config.yaml"
 
 ENV PORT 80
 EXPOSE 80
-RUN echo $(ls)
 ENTRYPOINT ["./backend.exe"]
