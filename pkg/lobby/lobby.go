@@ -94,14 +94,6 @@ func (l *Lobby) LobbyRequestHandler(config *config.Config) {
 							LobbyStartGameBroadcast{Game: l.GameName})
 						l.Log.Info(fmt.Sprintf(
 							"Started new game of %s in lobby %s", l.GameName, l.LobbyID))
-
-						// Forward request to GameService
-						errMessage := config.Games[l.GameName].HandleRequest(
-							l.GameRequestChan, l.GameState, req.PlayerID,
-							"StartGameRequest", req.Message.Contents)
-						if errMessage != nil {
-							req.ConnChannel <- comms.ToMessage(errMessage)
-						}
 					} else {
 						req.ConnChannel <- comms.ToMessage(LobbyStartGameResponse{
 							Status: false,

@@ -16,6 +16,7 @@ type State struct {
 	Board   [3][3]int
 
 	currentPlayer int
+	finished      bool
 }
 
 func (s State) isValidMove(x, y int) bool {
@@ -40,8 +41,10 @@ func NewState(players []string) (interface{}, error) {
 	}
 
 	return &State{
-		Players: players,
-		Board:   [3][3]int{},
+		Players:       players,
+		Board:         [3][3]int{},
+		currentPlayer: rand.Intn(len(players)),
+		finished:      false,
 	}, nil
 }
 
@@ -54,11 +57,14 @@ func HandleRequest(
 ) interface{} {
 	// Decode state
 	state := stateInterface.(*State)
+	if state.finished {
+		return comms.ErrorResponse{Reason: "Game has already ended"}
+	}
 
 	// Handle the request
 	switch messageType {
-	case "StartGameRequest":
-		// Start the game
+	case "PlayerGetGameSetupRequest":
+		// Return game setup information to clients
 		gameChan <- game.GameRequest{
 			Players: state.Players,
 			Message: comms.ToMessage(PlayerSymbolsBroadcast{
@@ -66,7 +72,6 @@ func HandleRequest(
 				PlayerCross:  state.Players[1],
 			}),
 		}
-		state.currentPlayer = rand.Intn(len(state.Players))
 		gameChan <- game.GameRequest{
 			Players: state.Players,
 			Message: comms.ToMessage(PlayerTurnBroadcast{
@@ -105,8 +110,9 @@ func HandleRequest(
 							Players: state.Players,
 							Message: comms.ToMessage(WinnerBroadcast{player}),
 						}
+						state.finished = true
 					} else {
-						// Next player is making a move
+						// Tell the next player to make a move
 						gameChan <- game.GameRequest{
 							Players: state.Players,
 							Message: comms.ToMessage(
